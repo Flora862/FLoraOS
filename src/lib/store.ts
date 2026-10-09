@@ -95,22 +95,69 @@ export function behindDays(b: { pages: number; current: number; start: string; e
 }
 
 /* 财务 */
+/** 由字符串生成稳定 uuid：同一个月同一个信封，在任何设备上 uid 一样，同步时合并而不是重复 */
+export function stableUuid(str: string) {
+  let h1 = 0x811c9dc5, h2 = 0x01000193, h3 = 0xdeadbeef, h4 = 0x12345678
+  for (const ch of str) { const c = ch.charCodeAt(0); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 + c, 2246822507) >>> 0; h3 = Math.imul(h3 ^ (c << 3), 3266489909) >>> 0; h4 = (h4 + Math.imul(c, 374761393)) >>> 0 }
+  const hex = [h1, h2, h3, h4].map(x => x.toString(16).padStart(8, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
+}
 export async function ensureMonth(cfg: AppConfig) {
   const m = month()
-  const n = await db.envelopes.where('month').equals(m).count()
-  if (n) return
-  await db.envelopes.bulkAdd(cfg.finance.envelopes.map(e => ({ month: m, name: e.name, budget: e.budget, used: e.locked ? e.budget : 0, locked: e.locked, color: e.color })))
-  if ((await db.accounts.count()) === 0) await db.accounts.bulkAdd(cfg.finance.accounts.map(a => ({ ...a })))
+  for (const e of cfg.finance.envelopes) {
+    const uid = stableUuid('env:' + m + ':' + e.name)
+    const ex = await db.envelopes.where('uid').equals(uid).first()
+    if (!ex) await db.envelopes.add({ uid, month: m, name: e.name, budget: e.budget, used: e.locked ? e.budget : 0, locked: e.locked, color: e.color })
+  }
+  for (const a of cfg.finance.accounts) {
+    const uid = stableUuid('acc:' + a.name)
+    const ex = await db.accounts.where('uid').equals(uid).first()
+    if (!ex) await db.accounts.add({ uid, name: a.name, amount: a.amount, rule: a.rule })
+  }
+  await dedupeFinance()
+}
+/** 清理早期版本在多台设备各建一份造成的重复：同名的并进稳定 uid 那一行 */
+export async function dedupeFinance() {
+  const envs = await db.envelopes.filter(e => !e.deletedAt).toArray()
+  const groups = new Map<string, typeof envs>()
+  for (const e of envs) { const k = e.month + '|' + e.name; groups.set(k, [...(groups.get(k) ?? []), e]) }
+  for (const [k, list] of groups) {
+    if (list.length < 2) continue
+    const [m, name] = k.split('|'); const keepUid = stableUuid('env:' + m + ':' + name)
+    const keep = list.find(e => e.uid === keepUid) ?? list[0]
+    const others = list.filter(e => e.id !== keep.id)
+    const used = keep.locked ? keep.budget : Math.max(keep.used, ...others.map(o => o.used), others.reduce((a, o) => a + o.used, 0) > keep.used ? others.reduce((a, o) => a + o.used, 0) : 0)
+    await db.envelopes.update(keep.id!, { used })
+    for (const o of others) { await db.transactions.where('envelopeId').equals(o.id!).modify({ envelopeId: keep.id }); await db.envelopes.update(o.id!, { deletedAt: new Date().toISOString() }) }
+  }
+  const accs = await db.accounts.filter(a => !a.deletedAt).toArray()
+  const ag = new Map<string, typeof accs>()
+  for (const a of accs) ag.set(a.name, [...(ag.get(a.name) ?? []), a])
+  for (const [name, list] of ag) {
+    if (list.length < 2) continue
+    const keep = list.find(a => a.uid === stableUuid('acc:' + name)) ?? list[0]
+    const amount = Math.max(...list.map(a => a.amount))
+    await db.accounts.update(keep.id!, { amount })
+    for (const o of list.filter(a => a.id !== keep.id)) await db.accounts.update(o.id!, { deletedAt: new Date().toISOString() })
+  }
+}
+/** 改了预算：把本月信封的 budget 同步过去 */
+export async function setBudgets(cfg: AppConfig) {
+  const m = month()
+  for (const e of cfg.finance.envelopes) {
+    const ex = await db.envelopes.where('uid').equals(stableUuid('env:' + m + ':' + e.name)).first()
+    if (ex) await db.envelopes.update(ex.id!, { budget: e.budget, used: e.locked ? e.budget : ex.used })
+  }
 }
 export async function spend(amount: number, envelopeName: string, text: string, cfg: AppConfig, entryId?: number) {
   await ensureMonth(cfg)
-  const env = await db.envelopes.where({ month: month(), name: envelopeName }).first()
+  const env = await db.envelopes.where({ month: month(), name: envelopeName }).filter(e => !e.deletedAt).first()
   if (!env) return
   await db.envelopes.update(env.id!, { used: env.used + amount })
   await db.transactions.add({ date: today(), amount, envelopeId: env.id, text, entryId })
 }
 export function freeToSpend(envs: Envelope[]) {
-  return envs.filter(e => !e.locked).reduce((a, e) => a + Math.max(0, e.budget - e.used), 0)
+  return envs.filter(e => !e.locked && !e.deletedAt).reduce((a, e) => a + Math.max(0, e.budget - e.used), 0)
 }
 
 /* 复盘 */

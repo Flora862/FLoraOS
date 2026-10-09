@@ -7,6 +7,7 @@ const DS_KEY = import.meta.env.VITE_DEEPSEEK_KEY as string | undefined
 const CL_KEY = import.meta.env.VITE_CLAUDE_KEY as string | undefined
 const isLocalDev = import.meta.env.DEV
 
+export let lastError = ''
 export interface ClassifyResult { tags: string[]; todo?: string; issue?: string; ask: boolean; date?: string; confidence: number }
 
 async function callApi(body: Record<string, unknown>): Promise<Record<string, unknown> | null> {
@@ -15,9 +16,10 @@ async function callApi(body: Record<string, unknown>): Promise<Record<string, un
   if (!session) return null
   try {
     const r = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` }, body: JSON.stringify(body) })
-    if (!r.ok) return null
-    return await r.json()
-  } catch { return null }
+    const j = await r.json().catch(() => ({ error: 'HTTP ' + r.status }))
+    if (!r.ok) { lastError = j.error ?? ('HTTP ' + r.status); return null }
+    return j
+  } catch (e) { lastError = String(e); return null }
 }
 
 export async function classify(text: string, tagList: string[]): Promise<ClassifyResult | null> {

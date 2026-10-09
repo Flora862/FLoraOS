@@ -62,7 +62,7 @@ export default function App() {
       <motion.div key={view} custom={dir} initial={{ x: 40 * dir, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -40 * dir, opacity: 0 }} transition={{ duration: .18 }}>
         {view === 'home' && <Today cfg={cfg} go={go} />}
         {view === 'inbox' && <Inbox />}
-        {view === 'mods' && <Modules cfg={cfg} sub={sub} setSub={setSub} />}
+        {view === 'mods' && <Modules cfg={cfg} setCfg={setCfg} sub={sub} setSub={setSub} />}
         {view === 'review' && <Review cfg={cfg} />}
         {view === 'cfg' && <Settings cfg={cfg} setCfg={setCfg} />}
       </motion.div>

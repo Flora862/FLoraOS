@@ -17,7 +17,7 @@ const PALS = [
 
 export function Settings({ cfg, setCfg }: { cfg: AppConfig; setCfg: (c: AppConfig) => void }) {
   const toast = useToast()
-  const accounts = useLiveQuery(() => db.accounts.toArray(), []) ?? []
+  const accounts = useLiveQuery(() => db.accounts.filter(a => !a.deletedAt).toArray(), []) ?? []
   const [name, setName] = useState(cfg.name)
   const [invite, setInvite] = useState('')
   const [email, setEmail] = useState('')

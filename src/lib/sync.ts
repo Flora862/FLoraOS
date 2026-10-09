@@ -2,6 +2,7 @@
 // 规则：每行有 uid + updatedAt + dirty。改了就 dirty=1；push 把 dirty 行上传；pull 拉回别处更新的行；后写的赢。
 import { db, syncFlags } from './db'
 import { supabase } from './supabase'
+import { dedupeFinance } from './store'
 
 const SYNC_TABLES = ['entries', 'todos', 'issues', 'bigThings', 'reviews', 'dailyStates', 'books', 'readingLogs', 'envelopes', 'accounts', 'transactions', 'lessons'] as const
 
@@ -63,6 +64,7 @@ export async function sync(): Promise<{ pushed: number; pulled: number } | null>
       }
     } finally { syncFlags.applyingRemote = false }
     localStorage.setItem('floraos.lastPull', maxTs)
+    if (pulled) await dedupeFinance()
     return { pushed, pulled }
   } finally { running = false }
 }

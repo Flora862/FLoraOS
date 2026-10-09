@@ -18,7 +18,7 @@ export function Today({ cfg, go }: { cfg: AppConfig; go: (v: string, sub?: strin
   const big = useLiveQuery(() => db.bigThings.where('date').equals(T).first(), [T])
   const entries = useLiveQuery(() => db.entries.orderBy('at').reverse().limit(3).toArray(), []) ?? []
   const issues = useLiveQuery(() => db.issues.where('status').equals('open').toArray(), []) ?? []
-  const envs = useLiveQuery(() => db.envelopes.where('month').equals(month()).toArray(), []) ?? []
+  const envs = useLiveQuery(() => db.envelopes.where('month').equals(month()).filter(e => !e.deletedAt).toArray(), []) ?? []
   const book = useLiveQuery(() => db.books.where('status').equals('reading').first(), [])
   const quotes = useLiveQuery(() => db.entries.filter(e => e.tags.includes('图书')).toArray(), []) ?? []
   const [streak, setStreak] = useState(0)
@@ -27,6 +27,7 @@ export function Today({ cfg, go }: { cfg: AppConfig; go: (v: string, sub?: strin
   const td = todos.filter(t => t.date === T); const done = td.filter(t => t.done).length
   const day = td.filter(t => !t.evening), eve = td.filter(t => t.evening)
   const free = freeToSpend(envs)
+  const upcoming = todos.filter(t => !t.done && t.date !== T).sort((a, b) => (a.date ?? '9') < (b.date ?? '9') ? -1 : 1).slice(0, 8)
   const [left, setLeft] = useState((big?.minutes ?? cfg.bigThingMinutes) * 60)
   const [running, setRunning] = useState(false)
   useEffect(() => { if (!running) return; const id = setInterval(() => setLeft(l => { if (l <= 1) { clearInterval(id); setRunning(false); finish('done') } return l - 1 }), 1000); return () => clearInterval(id) }, [running])
@@ -73,6 +74,7 @@ export function Today({ cfg, go }: { cfg: AppConfig; go: (v: string, sub?: strin
         {eve.map(t => <TodoRow key={t.id} t={t} onToggle={() => toggleTodo(t.id!)} onMove={() => moveTodo(t.id!, dOff(1))} />)}
         {!eve.length && <div className="muted text-[13px]">今晚空着</div>}
 
+        {upcoming.length > 0 && <><div className="sect">接下来 <span>{upcoming.length} 件</span></div>{upcoming.map(t => <TodoRow key={t.id} t={t} onToggle={() => toggleTodo(t.id!)} onMove={() => moveTodo(t.id!, T)} />)}</>}
         {quote && <div className="tile t2 mt-3.5"><div className="lbl">今日摘录 · 来自你的图书</div><div className="text-[16px] font-bold leading-relaxed">"{quote.text}"</div></div>}
         {issues.length > 0 && <><div className="sect">还没解决的问题 <span>{issues.length}</span></div><div className="card">{issues.map(i => <div key={i.id} className="item">{i.text}</div>)}</div></>}
 

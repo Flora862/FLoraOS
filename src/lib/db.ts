@@ -12,6 +12,7 @@ export interface Entry extends Synced {
   tags: string[]
   die?: string        // 想法类：最可能在哪死
   test?: string       // 想法类：最便宜的验证动作
+  note?: string       // 复盘时补的备注
   review: ReviewState
   reviewedAt?: string
   deletedAt?: string
@@ -94,12 +95,14 @@ export interface Envelope extends Synced {
   used: number
   locked: boolean     // 锁定 = 不计入"还能放心花"
   color: string
+  deletedAt?: string
 }
 export interface Account extends Synced {
   id?: number
   name: string
   amount: number
   rule: string
+  deletedAt?: string
 }
 export interface Transaction extends Synced {
   id?: number

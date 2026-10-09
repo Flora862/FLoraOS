@@ -6,7 +6,8 @@ import { today, dOff, hm } from '../lib/dates'
 import { saveDailyState, resultBigThing, solveIssue, addBlock, completeReview, setBigThing, moveTodo, toggleTodo } from '../lib/store'
 import type { AppConfig } from '../lib/config'
 import { Chip, confetti, useToast } from '../components/ui'
-import { summarize } from '../lib/llm'
+import { summarize, lastError } from '../lib/llm'
+import { setEntryReview } from '../lib/store'
 import { TodoRow } from '../components/TodoRow'
 
 const MOODS = ['😩', '😕', '😐', '🙂', '😄'], BODIES = ['🤒', '😮‍💨', '😐', '💪', '🔥']
@@ -43,7 +44,7 @@ export function Review({ cfg }: { cfg: AppConfig }) {
         `心情均值 ${avg('mood')}/4，身体均值 ${avg('body')}/4，姨妈期标记 ${states.filter(d => (d.sub as { period?: unknown }).period).length} 天`,
       ].join('\n')
       const r = await summarize(text)
-      if (!r) { toast('AI 没接上：检查 Vercel 的 DEEPSEEK_KEY，或者本地开发没有 /api'); return }
+      if (!r) { toast('AI 没接上：' + (lastError || '本地开发没有 /api')); return }
       await db.lessons.add({ period: 'week', range: `${since}~${today()}`, draft: r.text, createdAt: new Date().toISOString() })
       toast('总结好了（' + r.model + '），改完再存成经验')
     } finally { setSumming(false) }
@@ -135,7 +136,7 @@ function Flow({ cfg, exit }: { cfg: AppConfig; exit: () => void }) {
           </>) : <div className="muted">今天没定大事。最后一步定明天的。</div>)}
           {step === 2 && (<>
             <div className="flex gap-1.5 mb-1.5 flex-wrap"><span className="chip">{entries.length} 条</span><span className="chip c4">想法 {entries.filter(e => e.tags.includes('想法')).length}</span><span className="chip c5">图书 {entries.filter(e => e.tags.includes('图书')).length}</span></div>
-            {entries.map(e => <div key={e.id} className="item"><div className="t">{hm(e.at)} · {e.tags.map(t => <Chip key={t} t={t} />)}</div>{e.text}</div>)}
+            {entries.map(e => <EntryRow key={e.id} e={e} />)}
             {!entries.length && <div className="muted">今天没记东西。</div>}
           </>)}
           {step === 3 && (<>
@@ -164,6 +165,21 @@ function IssueRow({ i, onHandled }: { i: { id?: number; text: string; blocks: { 
     <div className="item">{i.text}
       {mode === '' && <div className="flex gap-1.5 mt-1.5"><button className="pill sm" onClick={() => setMode('solve')}>解决了</button><button className="pill sm ghost" onClick={() => setMode('block')}>卡在哪</button><button className="pill sm ghost" onClick={() => toast('留在池里')}>下次</button></div>}
       {mode !== '' && <div className="flex gap-1.5 mt-1.5 items-end"><textarea rows={1} value={v} onChange={e => setV(e.target.value)} placeholder={mode === 'solve' ? '怎么解决的，一句' : '卡在哪，一句'} /><button className="pill sm" onClick={async () => { if (mode === 'solve') { await solveIssue(i.id!, v); onHandled(); toast('已解决，移到已复盘') } else { await addBlock(i.id!, v); toast('卡点已追加，带日期') } setMode(''); setV('') }}>记</button></div>}
+    </div>
+  )
+}
+
+function EntryRow({ e }: { e: { id?: number; at: string; text: string; tags: string[]; note?: string; review: string } }) {
+  const [open, setOpen] = useState(false)
+  const [note, setNote] = useState(e.note ?? '')
+  const toast = useToast()
+  return (
+    <div className="item">
+      <div className="t" onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer' }}>{hm(e.at)} · {e.tags.map(t => <Chip key={t} t={t} />)}<span className="ml-auto muted">{open ? '收起' : '备注 ›'}</span></div>
+      <div onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer' }}>{e.text}</div>
+      {e.note && !open && <div className="m">备注：{e.note}</div>}
+      {open && <div className="mt-2 grid gap-1.5"><textarea rows={2} value={note} onChange={ev => setNote(ev.target.value)} placeholder="补一句备注：现在怎么看这条" />
+        <div className="flex gap-1.5"><button className="pill sm" onClick={async () => { await db.entries.update(e.id!, { note }); toast('备注存了'); setOpen(false) }}>存</button><button className="pill sm ghost" onClick={async () => { await setEntryReview(e.id!, e.review === 'none'); toast(e.review === 'none' ? '标了要复盘，进池子' : '取消了') }}>{e.review === 'none' ? '要复盘' : '🔁 已标'}</button></div></div>}
     </div>
   )
 }

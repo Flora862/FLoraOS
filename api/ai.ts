@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const auth = req.headers.authorization ?? ''
   const token = auth.replace(/^Bearer\s+/i, '')
   if (!token) return res.status(401).json({ error: 'no token' })
-  const supaUrl = process.env.SUPABASE_URL, anon = process.env.SUPABASE_ANON_KEY
+  const supaUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL, anon = process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY
   if (!supaUrl || !anon) return res.status(500).json({ error: 'server missing SUPABASE_URL/ANON' })
   const u = await fetch(`${supaUrl}/auth/v1/user`, { headers: { Authorization: `Bearer ${token}`, apikey: anon } })
   if (!u.ok) return res.status(401).json({ error: 'not logged in' })
@@ -33,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (task === 'summary') {
       const out = useClaude ? await claude(cl!, SUMMARY_SYSTEM, text, 900) : ds ? await deepseek(ds, SUMMARY_SYSTEM, text, false) : null
-      if (out === null) return res.status(503).json({ error: 'no model key' })
+      if (out === null) return res.status(503).json({ error: 'Vercel 里没有 DEEPSEEK_KEY，或者加了没重新部署' })
       return res.json({ text: out, model: useClaude ? 'claude' : 'deepseek' })
     }
     const sys = CLASSIFY_SYSTEM + `\n标签列表：${(tags ?? []).join('、')}\n今天是 ${today ?? new Date().toISOString().slice(0, 10)}`
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (ds) out = await deepseek(ds, sys, text, true)
     let parsed = safeJson(out)
     if ((!parsed || (parsed.confidence ?? 1) < 0.6) && cl) { out = await claude(cl, sys, text, 300); parsed = safeJson(out) ?? parsed; model = 'claude' }
-    if (!parsed) return res.status(503).json({ error: 'no model key or bad output' })
+    if (!parsed) return res.status(503).json({ error: ds ? '模型返回不可解析' : 'Vercel 里没有 DEEPSEEK_KEY，或者加了没重新部署' })
     return res.json({ ...parsed, model })
   } catch (e) {
     return res.status(502).json({ error: String(e) })

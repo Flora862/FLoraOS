@@ -71,6 +71,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
             className="min-h-[46px] max-h-[120px] rounded-2xl" style={{ background: 'var(--bg)' }} />
           <motion.button whileTap={{ scale: .93 }} onClick={send} className="ink h-[46px] w-[46px] rounded-2xl border-0 text-[18px] cursor-pointer shrink-0" title="发送">↑</motion.button>
         </div>
+        {idea !== null && <div className="t4 rounded-2xl p-3 mt-2 text-[14px]"><b>追问：这个想法最可能在哪里死？</b><div className="text-[12px] opacity-80 mt-0.5">在上面写一句回答再发送，会挂到那条想法后面。这是练判断的那一步。</div><button className="pill sm ghost mt-2" onClick={() => setIdea(null)}>这次跳过</button></div>}
         <div className="flex gap-1.5 flex-wrap min-h-[20px] mt-1.5 text-[12px] muted">
           {live ? (<>
             {live.tags.map(t => <span key={t} className={'chip ' + (TAGC[t] ?? 'c2')}>{t}</span>)}
