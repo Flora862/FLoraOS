@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { parse } from '../lib/parse'
 import { capture, resolveVague, setIdeaDie } from '../lib/store'
@@ -15,6 +15,21 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
   const [busy, setBusy] = useState(false)
   const toast = useToast()
   const live = text.trim() ? parse(text, cfg) : null
+  const [listening, setListening] = useState(false)
+  const recRef = useRef<SpeechRecognitionLike | null>(null)
+  function voice() {
+    const W = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike }
+    const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition
+    if (!Ctor) { toast('这个浏览器不支持语音。用键盘上的麦克风键听写也一样'); return }
+    if (listening) { recRef.current?.stop(); return }
+    const rec = new Ctor(); recRef.current = rec
+    rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false
+    const base = text
+    rec.onresult = (e) => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; setText(base + t) }
+    rec.onerror = (e) => { setListening(false); toast(e.error === 'not-allowed' ? '没拿到麦克风权限。设置里允许一下，或用键盘的麦克风键' : '语音没听清，再试一次') }
+    rec.onend = () => setListening(false)
+    try { rec.start(); setListening(true); toast('在听…说完自动停，再点一下也能停') } catch { setListening(false) }
+  }
 
   async function send() {
     const x = text.trim(); if (!x || busy) return
@@ -46,7 +61,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
     <>
       <div className={desktop ? 'px-4 py-3' : 'px-[14px] pt-3 pb-1.5'}>
         <div className="flex gap-2 items-end">
-          <motion.button whileTap={{ scale: .93 }} className="t4 h-[46px] w-[46px] rounded-2xl border-0 text-[18px] cursor-pointer shrink-0" title="语音" onClick={() => toast('语音入口在第 6 步：快捷指令按住说话')}>🎙</motion.button>
+          <motion.button whileTap={{ scale: .93 }} animate={listening ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={listening ? { repeat: Infinity, duration: 1 } : {}} className={(listening ? 'accent' : 't4') + ' h-[46px] w-[46px] rounded-2xl border-0 text-[18px] cursor-pointer shrink-0'} title="语音" onClick={voice}>{listening ? '■' : '🎙'}</motion.button>
           <textarea id="capture" value={text} onChange={e => setText(e.target.value)} rows={1}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
             placeholder={idea !== null ? '这个想法最可能在哪里死？直接回答' : '想到什么直接写。回车发送。'}
@@ -73,4 +88,12 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
       </Sheet>
     </>
   )
+}
+
+interface SpeechRecognitionLike {
+  lang: string; interimResults: boolean; continuous: boolean
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onerror: ((e: { error: string }) => void) | null
+  onend: (() => void) | null
+  start(): void; stop(): void
 }

@@ -6,6 +6,7 @@ import { today, dOff, hm } from '../lib/dates'
 import { saveDailyState, resultBigThing, solveIssue, addBlock, completeReview, setBigThing, moveTodo, toggleTodo } from '../lib/store'
 import type { AppConfig } from '../lib/config'
 import { Chip, confetti, useToast } from '../components/ui'
+import { summarize } from '../lib/llm'
 import { TodoRow } from '../components/TodoRow'
 
 const MOODS = ['😩', '😕', '😐', '🙂', '😄'], BODIES = ['🤒', '😮‍💨', '😐', '💪', '🔥']
@@ -21,6 +22,32 @@ export function Review({ cfg }: { cfg: AppConfig }) {
   const doneCount = useLiveQuery(() => db.reviews.filter(r => r.completed).count(), []) ?? 0
   const [tab, setTab] = useState<'wait' | 'done'>('wait')
   const doneItems = useLiveQuery(() => db.bigThings.where('review').equals('done').reverse().sortBy('date'), []) ?? []
+  const lessons = useLiveQuery(() => db.lessons.reverse().sortBy('createdAt'), []) ?? []
+  const [summing, setSumming] = useState(false)
+  const toast = useToast()
+  async function summarizeWeek() {
+    if (summing) return
+    setSumming(true)
+    try {
+      const since = dOff(-7)
+      const bigs = await db.bigThings.filter(b => b.date >= since).toArray()
+      const iss = await db.issues.filter(i => (i.blocks.length > 0 && i.blocks.some(b => b.at >= since)) || (i.solvedAt ?? '') >= since).toArray()
+      const refl = await db.entries.filter(e => e.review === 'done' && (e.reviewedAt ?? '') >= since).toArray()
+      const states = await db.dailyStates.filter(d => d.date >= since).toArray()
+      const avg = (k: 'mood' | 'body') => states.length ? (states.reduce((a, d) => a + d[k], 0) / states.length).toFixed(1) : '无'
+      const text = [
+        `时间范围：${since} 到 ${today()}`,
+        `大事（${bigs.length} 件）：` + bigs.map(b => `${b.date} ${b.text} → ${b.result ?? '未记'}${b.fact ? '｜事实：' + b.fact : ''}`).join('；'),
+        `问题与卡点：` + iss.map(i => `${i.text}（${i.status === 'solved' ? '已解决：' + (i.solvedHow ?? '') : '未解决'}；卡点：${i.blocks.map(b => b.text).join(' / ') || '无'}）`).join('；'),
+        `反思：` + refl.map(e => e.text).join('；'),
+        `心情均值 ${avg('mood')}/4，身体均值 ${avg('body')}/4，姨妈期标记 ${states.filter(d => (d.sub as { period?: unknown }).period).length} 天`,
+      ].join('\n')
+      const r = await summarize(text)
+      if (!r) { toast('AI 没接上：检查 Vercel 的 DEEPSEEK_KEY，或者本地开发没有 /api'); return }
+      await db.lessons.add({ period: 'week', range: `${since}~${today()}`, draft: r.text, createdAt: new Date().toISOString() })
+      toast('总结好了（' + r.model + '），改完再存成经验')
+    } finally { setSumming(false) }
+  }
   if (flow) return <Flow cfg={cfg} exit={() => setFlow(false)} />
   const n = pendingTodos.length + pendingEntries.length + openIssues.length + bigs.length
   return (
@@ -37,7 +64,12 @@ export function Review({ cfg }: { cfg: AppConfig }) {
           <div className="muted text-[13px] mt-2">留到你复盘到它为止，不会自动消失。</div>
         </div>
       ) : (
-        <div className="card">{doneItems.map(b => <div key={b.id} className="item"><div className="t"><span className="chip c3">已复盘</span>{b.date.slice(5)} · 大事</div>{b.text}{b.fact && <div className="m">{b.fact}</div>}</div>)}{!doneItems.length && <div className="muted text-[13px] py-2">还没有</div>}</div>
+        <div className="grid gap-3">
+          <div className="card"><div className="flex justify-between items-center mb-1"><b className="text-[14px]">经验</b><button className="pill sm" disabled={summing} onClick={summarizeWeek}>{summing ? '在想…' : '总结这周（AI）'}</button></div>
+            {lessons.map(l => <div key={l.id} className="item"><div className="t">{l.range} · 周</div><textarea rows={6} defaultValue={l.final ?? l.draft} onBlur={e => db.lessons.update(l.id!, { final: e.target.value })} /><div className="muted text-[12px] mt-1">改了会自动存，你改过的才算经验。</div></div>)}
+            {!lessons.length && <div className="muted text-[13px] py-1">攒一周已复盘的记录，点右上角让 AI 出做成率、反复卡点、经验条。</div>}</div>
+          <div className="card">{doneItems.map(b => <div key={b.id} className="item"><div className="t"><span className="chip c3">已复盘</span>{b.date.slice(5)} · 大事</div>{b.text}{b.fact && <div className="m">{b.fact}</div>}</div>)}{!doneItems.length && <div className="muted text-[13px] py-2">还没有</div>}</div>
+        </div>
       )}
     </div>
   )

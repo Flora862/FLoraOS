@@ -19,7 +19,10 @@
 :root[data-palette="night"]{--accent:#ff5c7a;--t1:#1f2a5c;--t2:#2b2150;--t3:#153a35;--t4:#4a1d33;--t5:#3f3010;--t1d:#8fb0ff;--t2d:#c2a6ff;--t3d:#5fe3b2;--t4d:#ff7a9c;--t5d:#ffd166}
 
 html,body,#root{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;font-size:15px;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;-webkit-tap-highlight-color:transparent;overscroll-behavior:none;font-size:15px;line-height:1.5;overflow-x:hidden;touch-action:pan-y;-webkit-text-size-adjust:100%}
+/* iOS：输入框字号小于 16px 会在聚焦时自动放大页面，统一 16px */
+input,textarea,select{font-size:16px!important}
+#root{overflow-x:hidden}
 
 .tile{border-radius:var(--radius);padding:14px;position:relative;overflow:hidden}
 .t1{background:var(--t1);color:var(--t1d)}.t2{background:var(--t2);color:var(--t2d)}.t3{background:var(--t3);color:var(--t3d)}.t4{background:var(--t4);color:var(--t4d)}.t5{background:var(--t5);color:var(--t5d)}
