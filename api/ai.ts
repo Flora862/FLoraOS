@@ -28,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const { task, text, tags, today } = (req.body ?? {}) as { task: 'classify' | 'summary'; text: string; tags?: string[]; today?: string }
   if (!text) return res.status(400).json({ error: 'no text' })
+  if (text.length > 6000) return res.status(413).json({ error: '文本太长' })
   const ds = process.env.DEEPSEEK_KEY, cl = process.env.CLAUDE_KEY
   const useClaude = (task === 'summary' || text.length > 800) && !!cl
   try {

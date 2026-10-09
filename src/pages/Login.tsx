@@ -16,7 +16,7 @@ export function Login() {
         if (error) setMsg(error.message.includes('Invalid') ? '邮箱或密码不对' : error.message)
       } else {
         const { error } = await supabase.auth.signUp({ email, password: pw, options: { data: { invite_code: code.trim().toUpperCase() } } })
-        if (error) setMsg(error.message.includes('INVITE') ? '邀请码无效或已用过' : error.message)
+        if (error) setMsg(/INVITE|Database error/i.test(error.message) ? '邀请码无效或已用过（第一个账号不需要）' : error.message)
         else setMsg('注册成功。如果你的项目开了邮件确认，去邮箱点一下链接再登录。')
       }
     } finally { setBusy(false) }

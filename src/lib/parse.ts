@@ -10,8 +10,8 @@ export interface Parsed {
   evening: boolean
   todo?: string
   issue?: string
-  ask: boolean            // 不明确 → 弹抽屉
-  pages?: number          // 图书：读到 N 页
+  ask: boolean
+  pages?: number
   money?: { amount: number; envelope: string }
   isIdea: boolean
   bigThing?: { day: 'today' | 'tomorrow'; text: string; standard?: string }
@@ -34,8 +34,24 @@ export function parseDate(x: string): string | undefined {
 }
 
 export function tagsOf(x: string, cfg: AppConfig): string[] {
-  const tags = cfg.tags.filter(t => t.words.some(w => x.includes(w))).map(t => t.name)
+  const lx = x.toLowerCase()
+  const tags = cfg.tags.filter(t => t.words.some(w => lx.includes(w.toLowerCase()))).map(t => t.name)
   return tags.length ? tags : ['杂']
+}
+
+/** 金额识别：要么紧挨货币符号（€12 / 12€ / 12 欧 / 12 块 / 12 元），要么命中了信封关键词且数字后面不是量词 */
+export function parseMoney(text: string, cfg: AppConfig): { amount: number; envelope: string } | null {
+  const lx = text.toLowerCase()
+  const envHit = cfg.finance.envelopes.find(e => e.words?.some(w => lx.includes(w.toLowerCase())))
+  const cur = text.match(/(?:€|eur)\s*(\d{1,5}(?:[.,]\d{1,2})?)|(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:€|eur|欧|块|元)/i)
+  let amount: number | undefined
+  if (cur) amount = parseFloat((cur[1] ?? cur[2]).replace(',', '.'))
+  else if (envHit || cfg.finance.moneyWords.some(w => lx.includes(w.toLowerCase()))) {
+    const m = [...text.matchAll(/(?<![\d.,])(\d{1,5}(?:[.,]\d{1,2})?)(?![\d.,]|\s*(?:本|点|号|页|个|次|分钟|分|小时|天|周|月|年|人|公里|km|g|kg|%|章|节))/g)].pop()
+    if (m) amount = parseFloat(m[1].replace(',', '.'))
+  }
+  if (!amount) return null
+  return { amount, envelope: envHit?.name ?? cfg.finance.envelopes.find(e => !e.locked)?.name ?? '机动' }
 }
 
 export function parse(x: string, cfg: AppConfig): Parsed {
@@ -58,24 +74,14 @@ export function parse(x: string, cfg: AppConfig): Parsed {
   // 图书：读到 N 页
   const pg = text.match(/读到\s*(\d+)\s*页/)
   if (pg) { p.pages = +pg[1]; if (!tags.includes('图书')) p.tags = [...tags.filter(t => t !== '杂'), '图书']; return p }
-
-  // 财务：金额 + 消费词
-  const money = text.match(/(?:€|欧)?\s*(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|欧|块)?/)
-  const envHit = cfg.finance.envelopes.find(e => e.words?.some(w => text.toLowerCase().includes(w.toLowerCase())))
-  if (money && (envHit || cfg.finance.moneyWords.some(w => text.toLowerCase().includes(w.toLowerCase())))) {
-    const amount = parseFloat(money[1].replace(',', '.'))
-    p.money = { amount, envelope: envHit?.name ?? '机动' }
-    p.tags = ['财务']
-    return p
-  }
-
+  // 财务：金额
+  const money = isIdea ? null : parseMoney(text, cfg)
+  if (money) { p.money = money; p.tags = ['财务']; return p }
   if (isIdea) return p
-
-  // 明确动作
-  const clearRe = new RegExp('(?:' + cfg.clearActionWords.join('|') + ')([^，。,.!！?？]{2,30})')
-  const clear = text.match(clearRe)
-  if (clear) { p.todo = clear[1].replace(/^(得|要|去)/, '').trim(); return p }
-
+  // 明确动作（词表里的单字会误伤"觉得/做得"，只用两字以上）
+  const words = cfg.clearActionWords.filter(w => w.length >= 2)
+  const clear = text.match(new RegExp('(?:' + words.join('|') + ')([^，。,.!！?？]{2,30})'))
+  if (clear) { p.todo = clear[1].replace(/^(得|要|去|把)/, '').trim(); return p }
   // 不明确
   if (cfg.vagueWords.some(w => text.includes(w))) p.ask = true
   return p

@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './lib/db'
 import { DEFAULT_CONFIG, type AppConfig } from './lib/config'
-import { loadConfig, seedIfEmpty, ensureMonth } from './lib/store'
+import { seedIfEmpty, ensureMonth } from './lib/store'
 import { greeting, today, W } from './lib/dates'
 import { ToastProvider } from './components/ui'
 import { Capture } from './components/Capture'
@@ -20,17 +20,21 @@ import type { Session } from '@supabase/supabase-js'
 type View = 'home' | 'inbox' | 'mods' | 'review' | 'cfg'
 const TABS: { v: View; i: string; l: string }[] = [{ v: 'home', i: '☀︎', l: '今日' }, { v: 'inbox', i: '⌸', l: '收件' }, { v: 'mods', i: '▦', l: '模块' }, { v: 'review', i: '◑', l: '复盘' }]
 const TITLES: Record<View, string> = { home: '今日', inbox: '收件', mods: '模块', review: '复盘', cfg: '设置' }
+const VIEWS = ['home', 'inbox', 'mods', 'review', 'cfg']
 
 export default function App() {
-  const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
+  // 配置是活的：别的设备改了主题/预算，同步回来这里立刻变
+  const cfgRow = useLiveQuery(() => db.config.get('app'), [])
+  const cfg: AppConfig = { ...DEFAULT_CONFIG, ...((cfgRow?.value as Partial<AppConfig>) ?? {}) }
   const [ready, setReady] = useState(false)
-  // 地址栏 #inbox / #mods/fin / #review 可直达，给快捷指令和书签用
-  const fromHash = () => { const [v, s] = location.hash.replace('#', '').split('/'); return { v: (['home', 'inbox', 'mods', 'review', 'cfg'].includes(v) ? v : 'home') as View, s: s || undefined } }
+  const fromHash = () => { const [v, s] = location.hash.replace('#', '').split('/'); return { v: (VIEWS.includes(v) ? v : 'home') as View, s: s || undefined } }
   const [view, setView] = useState<View>(() => fromHash().v)
   const [sub, setSub] = useState<string | undefined>(() => fromHash().s)
-  useEffect(() => { const h = () => { const { v, s } = fromHash(); setView(v); setSub(s) }; window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h) }, [])
   const [dir, setDir] = useState(1)
   const [session, setSession] = useState<Session | null | undefined>(cloudMode ? undefined : null)
+  const userId = session?.user.id
+
+  useEffect(() => { const h = () => { const { v, s } = fromHash(); setView(v); setSub(s) }; window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h) }, [])
   useEffect(() => {
     if (!supabase) return
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -38,22 +42,27 @@ export default function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
   useEffect(() => {
-    if (cloudMode && !session) return
-    (async () => {
+    if (cloudMode && !userId) return
+    let stop: (() => void) | undefined
+    ;(async () => {
       if (cloudMode) {
-        if (!localStorage.getItem('floraos.firstSyncDone')) { await markAllDirty(); localStorage.setItem('floraos.firstSyncDone', '1') }
-        await sync()
+        const key = 'floraos.firstSyncDone'
+        if (localStorage.getItem(key) !== userId) { await markAllDirty(); localStorage.setItem(key, userId!) }
+        await sync()   // 先拉云端，再建本月信封，避免用空信封覆盖云端
       } else await seedIfEmpty(DEFAULT_CONFIG)
-      const c = await loadConfig(); setCfg(c); await ensureMonth(c); setReady(true)
+      const row = await db.config.get('app')
+      await ensureMonth({ ...DEFAULT_CONFIG, ...((row?.value as Partial<AppConfig>) ?? {}) })
+      setReady(true)
+      stop = startAutoSync()
     })()
-    const stop = startAutoSync(); return stop
-  }, [session])
+    return () => stop?.()
+  }, [userId])
   useEffect(() => {
     const r = document.documentElement
     if (cfg.palette) r.setAttribute('data-palette', cfg.palette); else r.removeAttribute('data-palette')
     if (cfg.theme) r.setAttribute('data-theme', cfg.theme); else r.removeAttribute('data-theme')
   }, [cfg.palette, cfg.theme])
-  const pendingN = useLiveQuery(async () => (await db.issues.where('status').equals('open').count()) + (await db.todos.where('review').equals('pending').count()) + (await db.entries.where('review').equals('pending').count()), []) ?? 0
+  const pendingN = useLiveQuery(async () => (await db.issues.filter(i => i.status === 'open' && !i.deletedAt).count()) + (await db.todos.filter(t => t.review === 'pending' && !t.deletedAt).count()) + (await db.entries.filter(e => e.review === 'pending' && !e.deletedAt).count()), []) ?? 0
 
   function go(v: string, s?: string) { setDir(TABS.findIndex(t => t.v === v) >= TABS.findIndex(t => t.v === view) ? 1 : -1); setView(v as View); setSub(s); history.replaceState(null, '', '#' + v + (s ? '/' + s : '')) }
   if (cloudMode && session === undefined) return null
@@ -61,13 +70,13 @@ export default function App() {
   if (!ready) return null
   const d = new Date()
   const page = (
-    <AnimatePresence mode="wait" custom={dir}>
-      <motion.div key={view} custom={dir} initial={{ x: 40 * dir, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -40 * dir, opacity: 0 }} transition={{ duration: .18 }}>
+    <AnimatePresence mode="popLayout" initial={false}>
+      <motion.div key={view} initial={{ x: 40 * dir, opacity: 0 }} animate={{ x: 0, opacity: 1 }} transition={{ duration: .18 }}>
         {view === 'home' && <Today cfg={cfg} go={go} />}
         {view === 'inbox' && <Inbox cfg={cfg} />}
-        {view === 'mods' && <Modules cfg={cfg} setCfg={setCfg} sub={sub} setSub={setSub} />}
+        {view === 'mods' && <Modules cfg={cfg} sub={sub} setSub={setSub} />}
         {view === 'review' && <Review cfg={cfg} />}
-        {view === 'cfg' && <Settings cfg={cfg} setCfg={setCfg} />}
+        {view === 'cfg' && <Settings cfg={cfg} />}
       </motion.div>
     </AnimatePresence>
   )
@@ -80,7 +89,6 @@ export default function App() {
 
   return (
     <ToastProvider>
-      {/* 手机：单列 + 底部捕捉栏 + Tab */}
       <div className="lg:hidden max-w-[460px] mx-auto min-h-full">
         <div className="sticky z-10 px-4 pt-3 pb-1" style={{ top: 'env(safe-area-inset-top,0px)', background: 'var(--bg)' }}>{header}</div>
         <main className="px-4 pt-1.5" style={{ paddingBottom: 200 }}>{page}</main>
@@ -88,13 +96,12 @@ export default function App() {
           <div className="pointer-events-auto w-full max-w-[460px] rounded-t-3xl" style={{ background: 'var(--surface)', boxShadow: '0 -10px 30px rgba(0,0,0,.08)' }}>
             <Capture cfg={cfg} />
             <div className="flex px-2.5 pt-1" style={{ paddingBottom: 'calc(8px + env(safe-area-inset-bottom,0px))' }}>
-              {TABS.map(t => <button key={t.v} onClick={() => go(t.v)} className="flex-1 border-0 bg-transparent py-1.5 text-[11px] font-semibold flex flex-col items-center gap-0.5 cursor-pointer rounded-2xl relative" style={{ color: view === t.v ? 'var(--fg)' : 'var(--muted)', background: view === t.v ? 'var(--bg)' : 'transparent' }}><span className="text-[20px] leading-none">{t.i}</span>{t.l}{t.v === 'review' && pendingN > 0 && <span className="absolute top-1 right-[22%] w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />}</button>)}
+              {TABS.map(t => <button key={t.v} data-tab={t.v} onClick={() => go(t.v)} className="flex-1 border-0 bg-transparent py-1.5 text-[11px] font-semibold flex flex-col items-center gap-0.5 cursor-pointer rounded-2xl relative" style={{ color: view === t.v ? 'var(--fg)' : 'var(--muted)', background: view === t.v ? 'var(--bg)' : 'transparent' }}><span className="text-[20px] leading-none">{t.i}</span>{t.l}{t.v === 'review' && pendingN > 0 && <span className="absolute top-1 right-[22%] w-2 h-2 rounded-full" style={{ background: 'var(--accent)' }} />}</button>)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* 电脑：三栏 */}
       <div className="hidden lg:grid min-h-full" style={{ gridTemplateColumns: '220px 1fr 340px', gap: 24, maxWidth: 1240, margin: '0 auto', padding: '24px 24px 40px' }}>
         <aside className="sticky top-6 self-start">
           <div className="text-[22px] font-extrabold mb-6 flex items-center gap-2"><img src="/icon-192.png" alt="" className="w-7 h-7 rounded-lg" />FloraOS</div>
@@ -106,9 +113,7 @@ export default function App() {
           <div className="rounded-3xl mb-4" style={{ background: 'var(--surface)' }}><Capture cfg={cfg} desktop /></div>
           {page}
         </div>
-        <aside className="sticky top-6 self-start">
-          <RightRail go={go} />
-        </aside>
+        <aside className="sticky top-6 self-start"><RightRail go={go} /></aside>
       </div>
     </ToastProvider>
   )
@@ -116,8 +121,8 @@ export default function App() {
 
 function RightRail({ go }: { go: (v: string) => void }) {
   const T = today()
-  const issues = useLiveQuery(() => db.issues.where('status').equals('open').toArray(), []) ?? []
-  const refl = useLiveQuery(() => db.entries.where('review').equals('pending').toArray(), []) ?? []
+  const issues = useLiveQuery(() => db.issues.filter(i => i.status === 'open' && !i.deletedAt).toArray(), []) ?? []
+  const refl = useLiveQuery(() => db.entries.filter(e => e.review === 'pending' && !e.deletedAt).toArray(), []) ?? []
   const todos = useLiveQuery(() => db.todos.filter(t => !t.done && !t.deletedAt && !!t.date && t.date! >= T).sortBy('date'), [T]) ?? []
   return (
     <div className="grid gap-3">

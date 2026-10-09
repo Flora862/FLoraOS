@@ -7,22 +7,54 @@ import type { AppConfig } from '../lib/config'
 import type { Parsed } from '../lib/parse'
 import { Sheet, useToast, TAGC } from './ui'
 
-/** 常驻捕捉栏：输入即解析为芯片；回车发送；不明确弹必选抽屉；想法追问死因 */
+/** 聚焦当前可见的那个输入框（手机版和电脑版各一个） */
+export function focusCapture() {
+  const el = [...document.querySelectorAll<HTMLTextAreaElement>('textarea[data-capture]')].find(e => e.getBoundingClientRect().width > 0)
+  el?.focus()
+}
+
+/** 常驻捕捉栏：输入即解析为芯片；回车发送；不明确弹必选抽屉；想法用单独的追问卡 */
 export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean }) {
   const [text, setText] = useState('')
-  const [pending, setPending] = useState<{ parsed: Parsed; entryId: number } | null>(null)
-  const [idea, setIdea] = useState<number | null>(null)
+  const [pending, setPending] = useState<{ parsed: Parsed; entryUid: string } | null>(null)
+  const [idea, setIdea] = useState<string | null>(null)
+  const [dieText, setDieText] = useState('')
   const [busy, setBusy] = useState(false)
-  const toast = useToast()
-  const live = text.trim() ? parse(text, cfg) : null
   const [listening, setListening] = useState(false)
   const recRef = useRef<SpeechRecognitionLike | null>(null)
+  const toast = useToast()
+  const live = text.trim() ? parse(text, cfg) : null
+
+  async function send() {
+    const x = text.trim(); if (!x || busy) return
+    setBusy(true); setText('')
+    try {
+      const r = await capture(x, cfg, desktop ? 'desktop' : 'phone-text')
+      if (r.parsed.ask) { setPending(r); return }
+      done(r.parsed, r.entryUid)
+    } catch (e) { toast('没存上：' + String(e)); setText(x) } finally { setBusy(false) }
+  }
+  function done(p: Parsed, entryUid: string) {
+    let msg = '已收 · ' + p.tags.join(' / ')
+    if (p.bigThing) msg = (p.bigThing.day === 'today' ? '今天' : '明天') + '的大事定了' + (p.bigThing.standard ? '，标准也记了' : '。点大事卡可以补标准')
+    if (p.todo) msg += ' · 建了待办' + (p.date ? '（' + fmtDate(p.date) + '）' : '')
+    if (p.issue) msg += ' · 记为问题，进待复盘池'
+    if (p.pages) msg += ' · 进度已更新'
+    if (p.money) msg += ' · 已记到「' + p.money.envelope + '」' + (cfg.finance.envelopes.find(e => e.name === p.money!.envelope)?.locked ? '（固定项，只记流水）' : '')
+    toast(msg)
+    if (p.isIdea) { setIdea(entryUid); setDieText('') }
+  }
+  async function pick(k: 'todo' | 'issue' | 'none') {
+    if (!pending) return
+    await resolveVague(pending.entryUid, k, pending.parsed)
+    const p = { ...pending.parsed, todo: k === 'todo' ? '✓' : undefined, issue: k === 'issue' ? '✓' : undefined }
+    setPending(null); done(p, pending.entryUid)
+  }
   function voice() {
     const W = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike }
     const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition
     const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
-    if (isIOS || !Ctor) { document.getElementById('capture')?.focus(); toast(isIOS ? '点键盘右下角的麦克风说话，说完点右上角完成' : '这个浏览器不支持语音，用键盘上的麦克风键'); return }
-    if (false) { toast('这个浏览器不支持语音。用键盘上的麦克风键听写也一样'); return }
+    if (isIOS || !Ctor) { focusCapture(); toast(isIOS ? '点键盘右下角的麦克风说话，说完点右上角完成' : '这个浏览器不支持语音，用键盘上的麦克风键'); return }
     if (listening) { recRef.current?.stop(); return }
     const rec = new Ctor(); recRef.current = rec
     rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false
@@ -33,45 +65,27 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
     try { rec.start(); setListening(true); toast('在听…说完自动停，再点一下也能停'); window.setTimeout(() => { try { rec.stop() } catch { /* noop */ } }, 12000) } catch { setListening(false) }
   }
 
-  async function send() {
-    const x = text.trim(); if (!x || busy) return
-    if (idea !== null && !/想法/.test(x)) { await setIdeaDie(idea, x); setIdea(null); setText(''); toast('已挂到那条想法后面'); return }
-    setBusy(true); setText('')
-    try {
-      const r = await capture(x, cfg, desktop ? 'desktop' : 'phone-text')
-      if (r.parsed.ask) { setPending(r); return }
-      done(r.parsed, r.entryId)
-    } finally { setBusy(false) }
-  }
-  function done(p: Parsed, entryId: number) {
-    let msg = '已收 · ' + p.tags.join(' / ')
-    if (p.todo) msg += ' · 建了待办' + (p.date ? '（' + fmtDate(p.date) + '）' : '')
-    if (p.issue) msg += ' · 记为问题，进待复盘池'
-    if (p.bigThing) msg = (p.bigThing.day === 'today' ? '今天' : '明天') + '的大事定了' + (p.bigThing.standard ? '，标准也记了' : '。晚上复盘时补一句做成的标准')
-    if (p.pages) msg += ' · 进度已更新'
-    if (p.money) msg += ' · 已记到「' + p.money.envelope + '」' + (cfg.finance.envelopes.find(e => e.name === p.money!.envelope)?.locked ? '（固定项，只记流水不扣放心花）' : '')
-    toast(msg)
-    if (p.isIdea) setIdea(entryId)
-  }
-  async function pick(k: 'todo' | 'issue' | 'none') {
-    if (!pending) return
-    await resolveVague(pending.entryId, k, pending.parsed)
-    const p = { ...pending.parsed, todo: k === 'todo' ? '✓' : undefined, issue: k === 'issue' ? '✓' : undefined }
-    setPending(null); done(p, pending.entryId)
-  }
-
   return (
     <>
       <div className={desktop ? 'px-4 py-3' : 'px-[14px] pt-3 pb-1.5'}>
         <div className="flex gap-2 items-end">
           <motion.button whileTap={{ scale: .93 }} animate={listening ? { scale: [1, 1.08, 1] } : { scale: 1 }} transition={listening ? { repeat: Infinity, duration: 1 } : {}} className={(listening ? 'accent' : 't4') + ' h-[46px] w-[46px] rounded-2xl border-0 text-[18px] cursor-pointer shrink-0'} title="语音" onClick={voice}>{listening ? '■' : '🎙'}</motion.button>
-          <textarea id="capture" value={text} onChange={e => setText(e.target.value)} rows={1}
+          <textarea data-capture value={text} onChange={e => setText(e.target.value)} rows={1}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
-            placeholder={idea !== null ? '这个想法最可能在哪里死？直接回答' : '想到什么直接写。回车发送。'}
+            placeholder="想到什么直接写。回车发送。"
             className="min-h-[46px] max-h-[120px] rounded-2xl" style={{ background: 'var(--bg)' }} />
           <motion.button whileTap={{ scale: .93 }} onClick={send} className="ink h-[46px] w-[46px] rounded-2xl border-0 text-[18px] cursor-pointer shrink-0" title="发送">↑</motion.button>
         </div>
-        {idea !== null && <div className="t4 rounded-2xl p-3 mt-2 text-[14px]"><b>追问：这个想法最可能在哪里死？</b><div className="text-[12px] opacity-80 mt-0.5">在上面写一句回答再发送，会挂到那条想法后面。这是练判断的那一步。</div><button className="pill sm ghost mt-2" onClick={() => setIdea(null)}>这次跳过</button></div>}
+        {idea !== null && (
+          <div className="t4 rounded-2xl p-3 mt-2 text-[14px]">
+            <b>追问：这个想法最可能在哪里死？</b>
+            <div className="flex gap-1.5 mt-2">
+              <input className="flex-1 min-w-0 rounded-xl p-2.5 border-0" style={{ background: 'rgba(255,255,255,.6)' }} value={dieText} onChange={e => setDieText(e.target.value)} placeholder="一句话" onKeyDown={async e => { if (e.key === 'Enter' && dieText.trim()) { await setIdeaDie(idea, dieText.trim()); setIdea(null); toast('已挂到那条想法后面') } }} />
+              <button className="pill sm" onClick={async () => { if (!dieText.trim()) return; await setIdeaDie(idea, dieText.trim()); setIdea(null); toast('已挂到那条想法后面') }}>挂上</button>
+              <button className="pill sm ghost" onClick={() => setIdea(null)}>跳过</button>
+            </div>
+          </div>
+        )}
         <div className="flex gap-1.5 flex-wrap min-h-[20px] mt-1.5 text-[12px] muted">
           {live ? (<>
             {live.tags.map(t => <span key={t} className={'chip ' + (TAGC[t] ?? 'c2')}>{t}</span>)}
@@ -80,8 +94,9 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
             {live.pages && <span className="chip c5">读到 {live.pages} 页</span>}
             {live.money && <span className="chip c3">€{live.money.amount} → {live.money.envelope}</span>}
             {live.ask && <span className="chip ghost">会问你是待办还是问题</span>}
+            {live.todo && <span className="chip c3">→ 待办</span>}
             {live.bigThing && <span className="chip c5">→ {live.bigThing.day === 'today' ? '今天' : '明天'}的大事</span>}
-          </>) : <span>试试："明天得问 Lackmann 料号" · "和朋友吃饭 €25" · "纳瓦尔读到 226 页"</span>}
+          </>) : <span>试试："明天得问 Lackmann 料号" · "和朋友吃饭 €25" · "纳瓦尔读到 226 页" · "今天的大事是…"</span>}
         </div>
       </div>
       <Sheet open={!!pending} mandatory title="这句是什么？" sub={pending ? '“' + pending.parsed.text + '”' : ''}>
