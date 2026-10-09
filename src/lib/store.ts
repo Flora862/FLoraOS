@@ -27,7 +27,7 @@ export async function capture(text: string, cfg: AppConfig, source: Entry['sourc
 
 /** 抽屉里选了之后 */
 export async function resolveVague(entryId: number, kind: 'todo' | 'issue' | 'none', parsed: Parsed) {
-  if (kind === 'todo') await addTodo(todoFromVague(parsed.text), { entryId, date: parsed.date, evening: parsed.evening, tag: parsed.tags[0] })
+  if (kind === 'todo') await addTodo(todoFromVague(parsed.text), { entryId, date: parsed.date ?? today(), evening: parsed.evening, tag: parsed.tags[0] })
   if (kind === 'issue') await addIssue(issueFromText(parsed.text), entryId)
 }
 

@@ -62,11 +62,13 @@ export function Ring({ pct, size = 104, stroke = 9, children, track = 'rgba(255,
 
 /* ---------- 数字滚动 ---------- */
 export function CountUp({ to, prefix = '', suffix = '' }: { to: number; prefix?: string; suffix?: string }) {
-  const [v, setV] = useState(0)
+  const [v, setV] = useState(to)
+  const from = useRef(to)
   useEffect(() => {
+    const start = from.current; if (start === to) { setV(to); return }
     let raf = 0; const t0 = performance.now(); const dur = 700
-    const step = (t: number) => { const p = Math.min(1, (t - t0) / dur); setV(Math.round(to * (1 - Math.pow(1 - p, 3)))); if (p < 1) raf = requestAnimationFrame(step) }
-    raf = requestAnimationFrame(step); return () => cancelAnimationFrame(raf)
+    const step = (t: number) => { const p = Math.min(1, (t - t0) / dur); const e = 1 - Math.pow(1 - p, 3); setV(Math.round(start + (to - start) * e)); if (p < 1) raf = requestAnimationFrame(step); else from.current = to }
+    raf = requestAnimationFrame(step); return () => { cancelAnimationFrame(raf); from.current = to }
   }, [to])
   return <>{prefix}{v}{suffix}</>
 }
