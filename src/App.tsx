@@ -24,8 +24,11 @@ const TITLES: Record<View, string> = { home: '今日', inbox: '收件', mods: '�
 export default function App() {
   const [cfg, setCfg] = useState<AppConfig>(DEFAULT_CONFIG)
   const [ready, setReady] = useState(false)
-  const [view, setView] = useState<View>('home')
-  const [sub, setSub] = useState<string | undefined>()
+  // 地址栏 #inbox / #mods/fin / #review 可直达，给快捷指令和书签用
+  const fromHash = () => { const [v, s] = location.hash.replace('#', '').split('/'); return { v: (['home', 'inbox', 'mods', 'review', 'cfg'].includes(v) ? v : 'home') as View, s: s || undefined } }
+  const [view, setView] = useState<View>(() => fromHash().v)
+  const [sub, setSub] = useState<string | undefined>(() => fromHash().s)
+  useEffect(() => { const h = () => { const { v, s } = fromHash(); setView(v); setSub(s) }; window.addEventListener('hashchange', h); return () => window.removeEventListener('hashchange', h) }, [])
   const [dir, setDir] = useState(1)
   const [session, setSession] = useState<Session | null | undefined>(cloudMode ? undefined : null)
   useEffect(() => {
@@ -52,7 +55,7 @@ export default function App() {
   }, [cfg.palette, cfg.theme])
   const pendingN = useLiveQuery(async () => (await db.issues.where('status').equals('open').count()) + (await db.todos.where('review').equals('pending').count()) + (await db.entries.where('review').equals('pending').count()), []) ?? 0
 
-  function go(v: string, s?: string) { setDir(TABS.findIndex(t => t.v === v) >= TABS.findIndex(t => t.v === view) ? 1 : -1); setView(v as View); setSub(s) }
+  function go(v: string, s?: string) { setDir(TABS.findIndex(t => t.v === v) >= TABS.findIndex(t => t.v === view) ? 1 : -1); setView(v as View); setSub(s); history.replaceState(null, '', '#' + v + (s ? '/' + s : '')) }
   if (cloudMode && session === undefined) return null
   if (cloudMode && !session) return <ToastProvider><Login /></ToastProvider>
   if (!ready) return null

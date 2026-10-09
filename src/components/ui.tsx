@@ -65,10 +65,13 @@ export function CountUp({ to, prefix = '', suffix = '' }: { to: number; prefix?:
   const [v, setV] = useState(to)
   const from = useRef(to)
   useEffect(() => {
-    const start = from.current; if (start === to) { setV(to); return }
+    const start = from.current
+    if (start === to || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setV(to); from.current = to; return }
     let raf = 0; const t0 = performance.now(); const dur = 700
     const step = (t: number) => { const p = Math.min(1, (t - t0) / dur); const e = 1 - Math.pow(1 - p, 3); setV(Math.round(start + (to - start) * e)); if (p < 1) raf = requestAnimationFrame(step); else from.current = to }
-    raf = requestAnimationFrame(step); return () => { cancelAnimationFrame(raf); from.current = to }
+    raf = requestAnimationFrame(step)
+    const guard = window.setTimeout(() => { setV(to); from.current = to }, dur + 150)   // 后台/锁屏时 rAF 不跑，兜底落到终值
+    return () => { cancelAnimationFrame(raf); window.clearTimeout(guard); from.current = to }
   }, [to])
   return <>{prefix}{v}{suffix}</>
 }
