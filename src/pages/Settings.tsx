@@ -1,0 +1,45 @@
+import { useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db, exportAll } from '../lib/db'
+import { saveConfig } from '../lib/store'
+import type { AppConfig } from '../lib/config'
+import { hasLLM } from '../lib/llm'
+import { useToast } from '../components/ui'
+
+const PALS = [
+  { p: '', n: '粉彩', s: '按你的参考图', sw: ['#5b7cf0', '#e6dcff', '#d3f1e6', '#ffe1ea', '#fff0c4'] },
+  { p: 'sun', n: '暖阳', s: '奶黄底、芥末主色', sw: ['#e8b530', '#ffd6c2', '#d9efd0', '#f9d5e5', '#dbe9ff'] },
+  { p: 'indigo', n: '靛蓝', s: '冷、克制', sw: ['#3e63dd', '#e4e9f7', '#d6f0ef', '#f1e3ff', '#ffe9d6'] },
+  { p: 'night', n: '深夜', s: '深底霓虹块', sw: ['#ff5c7a', '#1f2a5c', '#153a35', '#4a1d33', '#3f3010'] },
+] as const
+
+export function Settings({ cfg, setCfg }: { cfg: AppConfig; setCfg: (c: AppConfig) => void }) {
+  const toast = useToast()
+  const accounts = useLiveQuery(() => db.accounts.toArray(), []) ?? []
+  const [name, setName] = useState(cfg.name)
+  async function upd(patch: Partial<AppConfig>) { const c = { ...cfg, ...patch }; setCfg(c); await saveConfig(c) }
+  return (
+    <div className="grid gap-3">
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>色系 · 点一下当场换</div>
+        <div className="grid grid-cols-2 gap-2">{PALS.map(x => <button key={x.p} onClick={() => upd({ palette: x.p })} className="text-left p-2.5 rounded-2xl border-2 cursor-pointer font-bold" style={{ background: 'var(--surface)', borderColor: cfg.palette === x.p ? 'var(--ink)' : 'transparent', color: 'var(--fg)' }}><span className="flex gap-1 mb-1.5">{x.sw.map(c => <i key={c} className="w-[18px] h-[18px] rounded-md block" style={{ background: c }} />)}</span>{x.n}<small className="block muted text-[11px] font-medium">{x.s}</small></button>)}</div>
+        <div className="flex gap-1.5 mt-2.5">{([['light', '浅色'], ['dark', '深色'], ['', '跟随系统']] as const).map(([v, l]) => <button key={v} className={'pill sm ' + (cfg.theme === v ? '' : 'ghost')} onClick={() => upd({ theme: v })}>{l}</button>)}</div>
+      </div>
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>我</div>
+        <div className="flex gap-2"><input className="flex-1 rounded-xl p-3 border-0" style={{ background: 'var(--bg)' }} value={name} onChange={e => setName(e.target.value)} /><button className="pill" onClick={() => upd({ name })}>存</button></div>
+        <div className="flex items-center justify-between mt-3"><span>大事时长</span><div className="flex gap-1.5">{[45, 60, 90, 120].map(m => <button key={m} className={'pill sm ' + (cfg.bigThingMinutes === m ? '' : 'ghost')} onClick={() => upd({ bigThingMinutes: m })}>{m} 分</button>)}</div></div>
+      </div>
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>财务 · 存量资金（真实数字只存这里）</div>
+        {accounts.map(a => <div key={a.id} className="flex items-center justify-between py-1.5"><span>{a.name}<small className="muted block text-[11px]">{a.rule}</small></span><input className="w-28 rounded-xl p-2 border-0 text-right tabular-nums" style={{ background: 'var(--bg)' }} inputMode="numeric" defaultValue={a.amount} onBlur={e => db.accounts.update(a.id!, { amount: +e.target.value || 0 })} /></div>)}
+        <div className="muted text-[13px] mt-2">月收入与信封预算在下一轮做成可编辑；现在在 config.ts 里。</div>
+      </div>
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>模型路由</div>
+        <div className="text-[14px]">{hasLLM ? '已连接模型：DeepSeek 默认，长文本 / 总结走 Claude。' : '没有填密钥，现在用规则分类（够用）。要开模型，复制 .env.example 成 .env 填密钥。'}</div>
+      </div>
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>数据</div>
+        <div className="text-[14px] mb-2">现在是<b>本地模式</b>：数据在这台设备的浏览器里。第 4 步接 Supabase 后手机电脑同步。</div>
+        <div className="flex gap-1.5"><button className="pill sm" onClick={async () => { const s = await exportAll(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' })); a.download = `floraos-${new Date().toISOString().slice(0, 10)}.json`; a.click(); toast('已导出整库 JSON') }}>整库导出</button>
+          <button className="pill sm ghost" onClick={async () => { if (!confirm('清空本地示例数据？你的真实记录也会一起清，先导出。')) return; await Promise.all(db.tables.map(t => t.clear())); location.reload() }}>清空重来</button></div>
+      </div>
+    </div>
+  )
+}
