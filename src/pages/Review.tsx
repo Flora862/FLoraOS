@@ -16,8 +16,8 @@ const TITLES = ['今天怎么样', '今天的大事', '今天进来了什么', '
 export function Review({ cfg }: { cfg: AppConfig }) {
   const [flow, setFlow] = useState(false)
   const T = today()
-  const pendingTodos = useLiveQuery(() => db.todos.where('review').equals('pending').toArray(), []) ?? []
-  const pendingEntries = useLiveQuery(() => db.entries.where('review').equals('pending').toArray(), []) ?? []
+  const pendingTodos = useLiveQuery(() => db.todos.where('review').equals('pending').filter(t => !t.deletedAt).toArray(), []) ?? []
+  const pendingEntries = useLiveQuery(() => db.entries.where('review').equals('pending').filter(e => !e.deletedAt).toArray(), []) ?? []
   const openIssues = useLiveQuery(() => db.issues.where('status').equals('open').toArray(), []) ?? []
   const bigs = useLiveQuery(() => db.bigThings.where('review').equals('pending').toArray(), []) ?? []
   const doneCount = useLiveQuery(() => db.reviews.filter(r => r.completed).count(), []) ?? 0
@@ -88,10 +88,10 @@ function Flow({ cfg, exit }: { cfg: AppConfig; exit: () => void }) {
   const [tomorrow, setTomorrow] = useState({ text: '', standard: '' })
   const [handled, setHandled] = useState<{ kind: string; id: number }[]>([])
   const big = useLiveQuery(() => db.bigThings.where('date').equals(T).first(), [T])
-  const entries = useLiveQuery(() => db.entries.filter(e => e.at.slice(0, 10) === T).reverse().toArray(), [T]) ?? []
+  const entries = useLiveQuery(() => db.entries.filter(e => e.at.slice(0, 10) === T && !e.deletedAt).reverse().toArray(), [T]) ?? []
   const issues = useLiveQuery(() => db.issues.where('status').equals('open').toArray(), []) ?? []
-  const reflections = useLiveQuery(() => db.entries.where('review').equals('pending').toArray(), []) ?? []
-  const todayTodos = useLiveQuery(() => db.todos.where('date').equals(T).filter(t => !t.done).toArray(), [T]) ?? []
+  const reflections = useLiveQuery(() => db.entries.where('review').equals('pending').filter(e => !e.deletedAt).toArray(), []) ?? []
+  const todayTodos = useLiveQuery(() => db.todos.where('date').equals(T).filter(t => !t.done && !t.deletedAt).toArray(), [T]) ?? []
   const lastPeriod = useLiveQuery(() => db.dailyStates.orderBy('date').reverse().filter(s => !!(s.sub as { period?: unknown }).period).first(), [])
   useEffect(() => { document.getElementById('rvtop')?.scrollIntoView() }, [step])
   const periodDay = (() => { const p = lastPeriod?.sub?.period as { day: number; ended?: boolean } | undefined; if (!p || p.ended) return 1; return p.day + Math.max(1, Math.round((Date.now() - new Date(lastPeriod!.date).getTime()) / 86400000)) })()

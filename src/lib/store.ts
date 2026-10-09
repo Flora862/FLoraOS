@@ -105,7 +105,7 @@ export function stableUuid(str: string) {
 export async function ensureMonth(cfg: AppConfig) {
   const m = month()
   for (const e of cfg.finance.envelopes) {
-    const uid = stableUuid('env:' + m + ':' + e.name)
+    const uid = stableUuid('env:' + m + ':' + (e.key ?? e.name))
     const ex = await db.envelopes.where('uid').equals(uid).first()
     if (!ex) await db.envelopes.add({ uid, month: m, name: e.name, budget: e.budget, used: e.locked ? e.budget : 0, locked: e.locked, color: e.color })
   }
@@ -123,7 +123,7 @@ export async function dedupeFinance() {
   for (const e of envs) { const k = e.month + '|' + e.name; groups.set(k, [...(groups.get(k) ?? []), e]) }
   for (const [k, list] of groups) {
     if (list.length < 2) continue
-    const [m, name] = k.split('|'); const keepUid = stableUuid('env:' + m + ':' + name)
+    const [m, name] = k.split('|'); const keepUid = stableUuid('env:' + m + ':' + (DEFAULT_CONFIG.finance.envelopes.find(x => x.name === name)?.key ?? name))
     const keep = list.find(e => e.uid === keepUid) ?? list[0]
     const others = list.filter(e => e.id !== keep.id)
     const used = keep.locked ? keep.budget : Math.max(keep.used, ...others.map(o => o.used), others.reduce((a, o) => a + o.used, 0) > keep.used ? others.reduce((a, o) => a + o.used, 0) : 0)
@@ -144,10 +144,15 @@ export async function dedupeFinance() {
 /** 改了预算：把本月信封的 budget 同步过去 */
 export async function setBudgets(cfg: AppConfig) {
   const m = month()
+  const keep = new Set<string>()
   for (const e of cfg.finance.envelopes) {
-    const ex = await db.envelopes.where('uid').equals(stableUuid('env:' + m + ':' + e.name)).first()
-    if (ex) await db.envelopes.update(ex.id!, { budget: e.budget, used: e.locked ? e.budget : ex.used })
+    const uid = stableUuid('env:' + m + ':' + (e.key ?? e.name)); keep.add(uid)
+    const ex = await db.envelopes.where('uid').equals(uid).first()
+    if (ex) await db.envelopes.update(ex.id!, { name: e.name, color: e.color, locked: e.locked, budget: e.budget, used: e.locked ? e.budget : ex.used, deletedAt: undefined })
+    else await db.envelopes.add({ uid, month: m, name: e.name, budget: e.budget, used: e.locked ? e.budget : 0, locked: e.locked, color: e.color })
   }
+  const cur = await db.envelopes.where('month').equals(m).filter(e => !e.deletedAt).toArray()
+  for (const e of cur) if (e.uid && !keep.has(e.uid)) await db.envelopes.update(e.id!, { deletedAt: new Date().toISOString() })
 }
 export async function spend(amount: number, envelopeName: string, text: string, cfg: AppConfig, entryId?: number) {
   await ensureMonth(cfg)

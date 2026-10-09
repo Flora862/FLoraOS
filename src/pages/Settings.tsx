@@ -35,7 +35,7 @@ export function Settings({ cfg, setCfg }: { cfg: AppConfig; setCfg: (c: AppConfi
       </div>
       <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>财务 · 存量资金（真实数字只存这里）</div>
         {accounts.map(a => <div key={a.id} className="flex items-center justify-between py-1.5"><span>{a.name}<small className="muted block text-[11px]">{a.rule}</small></span><input className="w-28 rounded-xl p-2 border-0 text-right tabular-nums" style={{ background: 'var(--bg)' }} inputMode="numeric" defaultValue={a.amount} onBlur={e => db.accounts.update(a.id!, { amount: +e.target.value || 0 })} /></div>)}
-        <div className="muted text-[13px] mt-2">月收入与信封预算在下一轮做成可编辑；现在在 config.ts 里。</div>
+        <div className="muted text-[13px] mt-2">月收入、每个信封的预算和名字：模块 → 财务 → 右上角"改预算"。</div>
       </div>
       <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>模型路由</div>
         <div className="text-[14px]">{hasLLM ? '已连接模型：DeepSeek 默认，长文本 / 总结走 Claude。' : '没有填密钥，现在用规则分类（够用）。要开模型，复制 .env.example 成 .env 填密钥。'}</div>

@@ -4,7 +4,7 @@ import type { Todo } from '../lib/db'
 import { TAGC } from './ui'
 
 /** 待办行：右滑完成（带阻尼），点圆圈也行 */
-export function TodoRow({ t, onToggle, onMove }: { t: Todo; onToggle: () => void; onMove?: () => void }) {
+export function TodoRow({ t, onToggle, onMove, onEdit }: { t: Todo; onToggle: () => void; onMove?: () => void; onEdit?: () => void }) {
   const x = useMotionValue(0)
   const under = useTransform(x, [0, 80], [0, 1])
   return (
@@ -20,7 +20,7 @@ export function TodoRow({ t, onToggle, onMove }: { t: Todo; onToggle: () => void
           style={{ border: '2px solid ' + (t.done ? 'var(--accent)' : 'var(--line)'), background: t.done ? 'var(--accent)' : 'transparent' }}>
           <motion.span initial={false} animate={{ scale: t.done ? [0.6, 1.25, 1] : 1 }} transition={{ duration: .35 }}>{t.done ? '✓' : ''}</motion.span>
         </button>
-        <span className={'flex-1 min-w-0 ' + (t.done ? 'line-through muted' : '')}>{t.text}</span>
+        <span className={'flex-1 min-w-0 ' + (t.done ? 'line-through muted' : '')} onClick={onEdit} style={{ cursor: onEdit ? 'pointer' : undefined }}>{t.text}</span>
         <span className={'chip ' + (TAGC[t.tag] ?? 'c2')} style={{ fontSize: 11, padding: '1px 7px' }}>{t.tag}</span>
         {t.review !== 'none' && <span title="要复盘">🔁</span>}
         <span className="muted text-[12px] whitespace-nowrap tabular-nums">{fmtDate(t.date)}</span>

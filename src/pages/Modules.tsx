@@ -109,7 +109,7 @@ function FinPage({ cfg, setCfg, back }: { cfg: AppConfig; setCfg: (c: AppConfig)
   const daysLeft = lastDay - new Date().getDate()
   const sum = draft.envelopes.reduce((a, e) => a + (+e.budget || 0), 0)
   async function saveBudgets() {
-    const c = { ...cfg, finance: { ...cfg.finance, income: +draft.income || 0, envelopes: draft.envelopes.map(e => ({ ...e, budget: +e.budget || 0 })) } }
+    const c = { ...cfg, finance: { ...cfg.finance, income: +draft.income || 0, envelopes: draft.envelopes.filter(e => e.name.trim()).map(e => ({ ...e, key: e.key ?? e.name, budget: +e.budget || 0 })) } }
     setCfg(c); await saveConfig(c); await setBudgets(c); setEdit(false); toast('预算改好了，本月信封同步更新')
   }
   return (
@@ -121,10 +121,11 @@ function FinPage({ cfg, setCfg, back }: { cfg: AppConfig; setCfg: (c: AppConfig)
         <div className="card mb-3 grid gap-2">
           <div className="lbl muted" style={{ opacity: 1 }}>每月预算（存你的库，不发给模型）</div>
           <label className="flex items-center justify-between"><span>月收入</span><input className="w-28 rounded-xl p-2 border-0 text-right tabular-nums" style={{ background: 'var(--bg)' }} inputMode="decimal" value={draft.income} onChange={e => setDraft({ ...draft, income: +e.target.value })} /></label>
-          {draft.envelopes.map((e, i) => <label key={e.name} className="flex items-center justify-between gap-2"><span className={'chip ' + e.color}>{e.name}</span><span className="muted text-[12px] ml-auto">{e.locked ? '锁定' : '可花'}</span><input className="w-24 rounded-xl p-2 border-0 text-right tabular-nums" style={{ background: 'var(--bg)' }} inputMode="decimal" value={e.budget} onChange={ev => setDraft({ ...draft, envelopes: draft.envelopes.map((x, k) => k === i ? { ...x, budget: +ev.target.value } : x) })} /></label>)}
+          {draft.envelopes.map((e, i) => <div key={e.key ?? i} className="flex items-center gap-1.5"><input className="flex-1 min-w-0 rounded-xl p-2 border-0" style={{ background: 'var(--bg)' }} value={e.name} onChange={ev => setDraft({ ...draft, envelopes: draft.envelopes.map((x, k) => k === i ? { ...x, name: ev.target.value } : x) })} /><button className={'pill sm ' + (e.locked ? '' : 'ghost')} title="锁定 = 固定支出或储蓄，不算进“放心花”" onClick={() => setDraft({ ...draft, envelopes: draft.envelopes.map((x, k) => k === i ? { ...x, locked: !x.locked } : x) })}>{e.locked ? '锁' : '花'}</button><input className="w-20 rounded-xl p-2 border-0 text-right tabular-nums" style={{ background: 'var(--bg)' }} inputMode="decimal" value={e.budget} onChange={ev => setDraft({ ...draft, envelopes: draft.envelopes.map((x, k) => k === i ? { ...x, budget: +ev.target.value } : x) })} /><button className="pill sm ghost" onClick={() => setDraft({ ...draft, envelopes: draft.envelopes.filter((_, k) => k !== i) })}>×</button></div>)}
+          <button className="pill sm ghost" onClick={() => setDraft({ ...draft, envelopes: [...draft.envelopes, { key: 'e' + Date.now().toString(36), name: '新信封', budget: 0, locked: false, color: ['c1', 'c2', 'c3', 'c4', 'c5'][draft.envelopes.length % 5] }] })}>＋ 加一个信封</button>
+          <div className="muted text-[12px]">"锁"= 固定支出或储蓄，不算进放心花；"花"= 可以花的。改名、加减都行。</div>
           <div className="text-[13px]" style={{ color: sum === +draft.income ? 'var(--muted)' : 'var(--t4d)' }}>信封合计 €{sum} / 收入 €{draft.income}{sum !== +draft.income && ' · 不相等，差 €' + (draft.income - sum)}</div>
           <button className="pill" onClick={saveBudgets}>保存</button>
-          <div className="muted text-[12px]">想加减信封种类、改名字，跟我说一句。</div>
         </div>
       ) : (<>
         <div className="sect">本月信封 <span>€{cfg.finance.income} 收入 · {month()}</span></div>

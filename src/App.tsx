@@ -61,7 +61,7 @@ export default function App() {
     <AnimatePresence mode="wait" custom={dir}>
       <motion.div key={view} custom={dir} initial={{ x: 40 * dir, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -40 * dir, opacity: 0 }} transition={{ duration: .18 }}>
         {view === 'home' && <Today cfg={cfg} go={go} />}
-        {view === 'inbox' && <Inbox />}
+        {view === 'inbox' && <Inbox cfg={cfg} />}
         {view === 'mods' && <Modules cfg={cfg} setCfg={setCfg} sub={sub} setSub={setSub} />}
         {view === 'review' && <Review cfg={cfg} />}
         {view === 'cfg' && <Settings cfg={cfg} setCfg={setCfg} />}
@@ -115,7 +115,7 @@ function RightRail({ go }: { go: (v: string) => void }) {
   const T = today()
   const issues = useLiveQuery(() => db.issues.where('status').equals('open').toArray(), []) ?? []
   const refl = useLiveQuery(() => db.entries.where('review').equals('pending').toArray(), []) ?? []
-  const todos = useLiveQuery(() => db.todos.filter(t => !t.done && !!t.date && t.date! >= T).sortBy('date'), [T]) ?? []
+  const todos = useLiveQuery(() => db.todos.filter(t => !t.done && !t.deletedAt && !!t.date && t.date! >= T).sortBy('date'), [T]) ?? []
   return (
     <div className="grid gap-3">
       <div className="tile ink cursor-pointer" onClick={() => go('review')}><div className="lbl">待复盘池</div><div className="num text-[28px]">{issues.length + refl.length}</div><div className="text-[13px] opacity-70 mt-1">问题 {issues.length} · 反思 {refl.length}</div></div>

@@ -32,12 +32,12 @@ export const DEFAULT_CONFIG = {
   finance: {
     income: 1000,   // 示例数，你的真实数字在设置里填，只存数据库
     envelopes: [
-      { name: '固定水电网', budget: 200, locked: true, color: 'c1' },
-      { name: '长期储蓄', budget: 500, locked: true, color: 'c1' },
-      { name: '买菜 / 基础吃饭', budget: 160, locked: false, color: 'c3', words: ['买菜', 'Rewe', 'Edeka', 'Lidl', 'Aldi', '超市', '菜'] },
-      { name: '外食 / 娱乐 / 社交', budget: 80, locked: false, color: 'c4', words: ['吃饭', '外食', '咖啡', '打车', '娱乐', '电影', '聚', '奶茶', '酒'] },
-      { name: '目标基金', budget: 40, locked: true, color: 'c5' },
-      { name: '机动', budget: 20, locked: false, color: 'c2' },
+      { key: 'fixed', name: '固定水电网', budget: 200, locked: true, color: 'c1' },
+      { key: 'save', name: '长期储蓄', budget: 500, locked: true, color: 'c1' },
+      { key: 'food', name: '买菜 / 基础吃饭', budget: 160, locked: false, color: 'c3', words: ['买菜', 'Rewe', 'Edeka', 'Lidl', 'Aldi', '超市', '菜'] },
+      { key: 'fun', name: '外食 / 娱乐 / 社交', budget: 80, locked: false, color: 'c4', words: ['吃饭', '外食', '咖啡', '打车', '娱乐', '电影', '聚', '奶茶', '酒'] },
+      { key: 'goal', name: '目标基金', budget: 40, locked: true, color: 'c5' },
+      { key: 'flex', name: '机动', budget: 20, locked: false, color: 'c2' },
     ],
     accounts: [
       { name: '安全底盘', amount: 3000, rule: '正常情况下不花' },
@@ -53,4 +53,5 @@ export const DEFAULT_CONFIG = {
     upgradeToClaudeWhen: { task: ['summary'], minChars: 800, minConfidence: 0.6 },
   },
 }
-export type AppConfig = typeof DEFAULT_CONFIG
+export type EnvelopeCfg = { key?: string; name: string; budget: number; locked: boolean; color: string; words?: string[] }
+export type AppConfig = Omit<typeof DEFAULT_CONFIG, 'finance'> & { finance: Omit<typeof DEFAULT_CONFIG['finance'], 'envelopes'> & { envelopes: EnvelopeCfg[] } }
