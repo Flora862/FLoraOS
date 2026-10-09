@@ -158,7 +158,7 @@ export async function spend(amount: number, envelopeName: string, text: string, 
   await ensureMonth(cfg)
   const env = await db.envelopes.where({ month: month(), name: envelopeName }).filter(e => !e.deletedAt).first()
   if (!env) return
-  await db.envelopes.update(env.id!, { used: env.used + amount })
+  if (!env.locked) await db.envelopes.update(env.id!, { used: env.used + amount })
   await db.transactions.add({ date: today(), amount, envelopeId: env.id, text, entryId })
 }
 export function freeToSpend(envs: Envelope[]) {

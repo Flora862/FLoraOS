@@ -4,7 +4,8 @@ import { Sheet, useToast, TAGC } from './ui'
 import type { AppConfig } from '../lib/config'
 
 /** 统一的编辑抽屉：条目 / 待办 / 大事。能改、能删（软删，数据还在）。 */
-export function EditEntry({ e, cfg, onClose }: { e: Entry | null; cfg: AppConfig; onClose: () => void }) {
+export function EditEntry(props: { e: Entry | null; cfg: AppConfig; onClose: () => void }) { return props.e ? <EditEntryInner key={props.e.id} {...props} /> : null }
+function EditEntryInner({ e, cfg, onClose }: { e: Entry | null; cfg: AppConfig; onClose: () => void }) {
   const toast = useToast()
   const [text, setText] = useState(e?.text ?? '')
   const [tags, setTags] = useState<string[]>(e?.tags ?? [])
@@ -29,7 +30,8 @@ export function EditEntry({ e, cfg, onClose }: { e: Entry | null; cfg: AppConfig
   )
 }
 
-export function EditTodo({ t, cfg, onClose }: { t: Todo | null; cfg: AppConfig; onClose: () => void }) {
+export function EditTodo(props: { t: Todo | null; cfg: AppConfig; onClose: () => void }) { return props.t ? <EditTodoInner key={props.t.id} {...props} /> : null }
+function EditTodoInner({ t, cfg, onClose }: { t: Todo | null; cfg: AppConfig; onClose: () => void }) {
   const toast = useToast()
   const [text, setText] = useState(t?.text ?? '')
   const [date, setDate] = useState(t?.date ?? '')

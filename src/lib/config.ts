@@ -32,11 +32,11 @@ export const DEFAULT_CONFIG = {
   finance: {
     income: 1000,   // 示例数，你的真实数字在设置里填，只存数据库
     envelopes: [
-      { key: 'fixed', name: '固定水电网', budget: 200, locked: true, color: 'c1' },
-      { key: 'save', name: '长期储蓄', budget: 500, locked: true, color: 'c1' },
+      { key: 'fixed', name: '固定水电网', budget: 200, locked: true, color: 'c1', words: ['水费', '电费', '网费', '房租', '话费', '宽带', '保险', 'Miete', 'Strom', 'Internet', 'Vodafone', 'Telekom', 'O2', 'Rundfunk'] },
+      { key: 'save', name: '长期储蓄', budget: 500, locked: true, color: 'c1', words: ['储蓄', '存款', '转存', '存了'] },
       { key: 'food', name: '买菜 / 基础吃饭', budget: 160, locked: false, color: 'c3', words: ['买菜', 'Rewe', 'Edeka', 'Lidl', 'Aldi', '超市', '菜'] },
       { key: 'fun', name: '外食 / 娱乐 / 社交', budget: 80, locked: false, color: 'c4', words: ['吃饭', '外食', '咖啡', '打车', '娱乐', '电影', '聚', '奶茶', '酒'] },
-      { key: 'goal', name: '目标基金', budget: 40, locked: true, color: 'c5' },
+      { key: 'goal', name: '目标基金', budget: 40, locked: true, color: 'c5', words: ['目标基金', '攒'] },
       { key: 'flex', name: '机动', budget: 20, locked: false, color: 'c2' },
     ],
     accounts: [
@@ -45,7 +45,7 @@ export const DEFAULT_CONFIG = {
       { name: '生活缓冲', amount: 500, rule: '临时小额非固定支出' },
       { name: '目标基金', amount: 0, rule: '从月收入积累' },
     ],
-    moneyWords: ['€', '欧', '块', '花了', '买了', '吃饭', '买菜', '打车', '咖啡', 'Rewe', 'Edeka', 'Lidl', 'Aldi'],
+    moneyWords: ['€', '欧', '块', '元', '费', '花了', '买了', '付了', '交了', '充了', '吃饭', '买菜', '打车', '咖啡', 'Rewe', 'Edeka', 'Lidl', 'Aldi', 'DM', 'Rossmann', 'Amazon'],
   },
   // 模型路由
   llm: {

@@ -44,7 +44,7 @@ export function merge(rule: Parsed, llm: ClassifyResult | null): Parsed {
   if (!llm || rule.bigThing) return rule
   return {
     ...rule,
-    tags: llm.tags?.length ? llm.tags : rule.tags,
+    tags: rule.money || rule.pages ? rule.tags : (llm.tags?.length ? llm.tags : rule.tags),
     todo: rule.pages || rule.money ? undefined : (llm.todo || rule.todo),
     issue: llm.issue || rule.issue,
     ask: rule.pages || rule.money || rule.isIdea ? false : (llm.ask ?? rule.ask),

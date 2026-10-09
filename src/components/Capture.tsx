@@ -49,7 +49,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
     if (p.issue) msg += ' · 记为问题，进待复盘池'
     if (p.bigThing) msg = (p.bigThing.day === 'today' ? '今天' : '明天') + '的大事定了' + (p.bigThing.standard ? '，标准也记了' : '。晚上复盘时补一句做成的标准')
     if (p.pages) msg += ' · 进度已更新'
-    if (p.money) msg += ' · 已记到「' + p.money.envelope + '」'
+    if (p.money) msg += ' · 已记到「' + p.money.envelope + '」' + (cfg.finance.envelopes.find(e => e.name === p.money!.envelope)?.locked ? '（固定项，只记流水不扣放心花）' : '')
     toast(msg)
     if (p.isIdea) setIdea(entryId)
   }

@@ -61,10 +61,10 @@ export function parse(x: string, cfg: AppConfig): Parsed {
 
   // 财务：金额 + 消费词
   const money = text.match(/(?:€|欧)?\s*(\d{1,4}(?:[.,]\d{1,2})?)\s*(?:€|欧|块)?/)
-  if (money && cfg.finance.moneyWords.some(w => text.includes(w))) {
+  const envHit = cfg.finance.envelopes.find(e => e.words?.some(w => text.toLowerCase().includes(w.toLowerCase())))
+  if (money && (envHit || cfg.finance.moneyWords.some(w => text.toLowerCase().includes(w.toLowerCase())))) {
     const amount = parseFloat(money[1].replace(',', '.'))
-    const env = cfg.finance.envelopes.find(e => e.words?.some(w => text.includes(w)))
-    p.money = { amount, envelope: env?.name ?? '机动' }
+    p.money = { amount, envelope: envHit?.name ?? '机动' }
     p.tags = ['财务']
     return p
   }
