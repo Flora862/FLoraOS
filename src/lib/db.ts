@@ -4,7 +4,7 @@ import Dexie, { type Table } from 'dexie'
 
 export type ReviewState = 'none' | 'pending' | 'done'
 
-export interface Entry {
+export interface Entry extends Synced {
   id?: number
   at: string          // ISO 时间
   text: string        // 原文，一字不改
@@ -16,7 +16,7 @@ export interface Entry {
   reviewedAt?: string
   deletedAt?: string
 }
-export interface Todo {
+export interface Todo extends Synced {
   id?: number
   text: string
   entryId?: number
@@ -29,7 +29,7 @@ export interface Todo {
   reviewedAt?: string
   deletedAt?: string
 }
-export interface Issue {
+export interface Issue extends Synced {
   id?: number
   text: string
   entryId?: number
@@ -41,7 +41,7 @@ export interface Issue {
   reviewedAt?: string
   deletedAt?: string
 }
-export interface BigThing {
+export interface BigThing extends Synced {
   id?: number
   date: string
   text: string
@@ -52,7 +52,7 @@ export interface BigThing {
   review: ReviewState
   reviewedAt?: string
 }
-export interface Review {
+export interface Review extends Synced {
   id?: number
   date: string
   answers: Record<string, unknown>
@@ -60,7 +60,7 @@ export interface Review {
   completed: boolean
   seconds: number
 }
-export interface DailyState {
+export interface DailyState extends Synced {
   id?: number
   date: string
   mood: number
@@ -69,7 +69,7 @@ export interface DailyState {
   bodyNote?: string
   sub: Record<string, unknown>   // { period:{day:3,tags:[...]}, skin:'好', sleep:'6–7h' }
 }
-export interface Book {
+export interface Book extends Synced {
   id?: number
   title: string
   pages: number
@@ -78,7 +78,7 @@ export interface Book {
   current: number
   status: 'reading' | 'finished' | 'dropped'
 }
-export interface ReadingLog {
+export interface ReadingLog extends Synced {
   id?: number
   bookId: number
   date: string
@@ -86,7 +86,7 @@ export interface ReadingLog {
   pagesRead: number
   met: boolean
 }
-export interface Envelope {
+export interface Envelope extends Synced {
   id?: number
   month: string       // YYYY-MM
   name: string
@@ -95,13 +95,13 @@ export interface Envelope {
   locked: boolean     // 锁定 = 不计入"还能放心花"
   color: string
 }
-export interface Account {
+export interface Account extends Synced {
   id?: number
   name: string
   amount: number
   rule: string
 }
-export interface Transaction {
+export interface Transaction extends Synced {
   id?: number
   date: string
   amount: number
@@ -110,7 +110,7 @@ export interface Transaction {
   text: string
   entryId?: number
 }
-export interface Lesson {
+export interface Lesson extends Synced {
   id?: number
   period: 'week' | 'month'
   range: string
@@ -118,7 +118,11 @@ export interface Lesson {
   final?: string
   createdAt: string
 }
-export interface ConfigRow { key: string; value: unknown }
+export interface ConfigRow { key: string; value: unknown; updatedAt?: string; dirty?: number }
+/** 所有同步表共有的三个字段，由 hooks 自动维护 */
+export interface Synced { uid?: string; updatedAt?: string; dirty?: number }
+
+export const syncFlags: { applyingRemote: boolean; onLocalWrite: (() => void) | null } = { applyingRemote: false, onLocalWrite: null }
 
 class FloraDB extends Dexie {
   entries!: Table<Entry, number>
@@ -136,21 +140,25 @@ class FloraDB extends Dexie {
   config!: Table<ConfigRow, string>
   constructor() {
     super('floraos')
-    this.version(1).stores({
-      entries: '++id, at, review, *tags',
-      todos: '++id, date, done, review',
-      issues: '++id, status, review',
-      bigThings: '++id, &date, review',
-      reviews: '++id, &date',
-      dailyStates: '++id, &date',
-      books: '++id, status',
-      readingLogs: '++id, bookId, date',
-      envelopes: '++id, month, name',
-      accounts: '++id, name',
-      transactions: '++id, date, envelopeId',
-      lessons: '++id, period',
-      config: 'key',
-    })
+    const v1 = {
+      entries: '++id, at, review, *tags', todos: '++id, date, done, review', issues: '++id, status, review',
+      bigThings: '++id, &date, review', reviews: '++id, &date', dailyStates: '++id, &date', books: '++id, status',
+      readingLogs: '++id, bookId, date', envelopes: '++id, month, name', accounts: '++id, name',
+      transactions: '++id, date, envelopeId', lessons: '++id, period', config: 'key',
+    }
+    this.version(1).stores(v1)
+    // v2：每张表加 uid 索引，供云端同步用
+    this.version(2).stores(Object.fromEntries(Object.entries(v1).map(([k, v]) => [k, k === 'config' ? v : v + ', uid'])))
+    // hooks：本地写入自动打 uid / updatedAt / dirty；拉取云端时跳过
+    for (const t of this.tables) {
+      if (t.name === 'config') {
+        t.hook('creating', (_k, obj: ConfigRow) => { if (!syncFlags.applyingRemote) { obj.updatedAt = new Date().toISOString(); obj.dirty = 1; syncFlags.onLocalWrite?.() } })
+        t.hook('updating', (mods) => { if (syncFlags.applyingRemote) return; syncFlags.onLocalWrite?.(); return { ...mods, updatedAt: new Date().toISOString(), dirty: 1 } })
+        continue
+      }
+      t.hook('creating', (_k, obj: Synced) => { if (!obj.uid) obj.uid = crypto.randomUUID(); if (!syncFlags.applyingRemote) { obj.updatedAt = new Date().toISOString(); obj.dirty = 1; syncFlags.onLocalWrite?.() } })
+      t.hook('updating', (mods) => { if (syncFlags.applyingRemote) return; syncFlags.onLocalWrite?.(); return { ...mods, updatedAt: new Date().toISOString(), dirty: 1 } })
+    }
   }
 }
 export const db = new FloraDB()

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, exportAll } from '../lib/db'
 import { saveConfig } from '../lib/store'
 import type { AppConfig } from '../lib/config'
 import { hasLLM } from '../lib/llm'
 import { useToast } from '../components/ui'
+import { supabase, cloudMode } from '../lib/supabase'
+import { sync } from '../lib/sync'
 
 const PALS = [
   { p: '', n: '粉彩', s: '按你的参考图', sw: ['#5b7cf0', '#e6dcff', '#d3f1e6', '#ffe1ea', '#fff0c4'] },
@@ -17,6 +19,9 @@ export function Settings({ cfg, setCfg }: { cfg: AppConfig; setCfg: (c: AppConfi
   const toast = useToast()
   const accounts = useLiveQuery(() => db.accounts.toArray(), []) ?? []
   const [name, setName] = useState(cfg.name)
+  const [invite, setInvite] = useState('')
+  const [email, setEmail] = useState('')
+  useEffect(() => { supabase?.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? '')) }, [])
   async function upd(patch: Partial<AppConfig>) { const c = { ...cfg, ...patch }; setCfg(c); await saveConfig(c) }
   return (
     <div className="grid gap-3">
@@ -35,10 +40,18 @@ export function Settings({ cfg, setCfg }: { cfg: AppConfig; setCfg: (c: AppConfi
       <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>模型路由</div>
         <div className="text-[14px]">{hasLLM ? '已连接模型：DeepSeek 默认，长文本 / 总结走 Claude。' : '没有填密钥，现在用规则分类（够用）。要开模型，复制 .env.example 成 .env 填密钥。'}</div>
       </div>
-      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>数据</div>
-        <div className="text-[14px] mb-2">现在是<b>本地模式</b>：数据在这台设备的浏览器里。第 4 步接 Supabase 后手机电脑同步。</div>
-        <div className="flex gap-1.5"><button className="pill sm" onClick={async () => { const s = await exportAll(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' })); a.download = `floraos-${new Date().toISOString().slice(0, 10)}.json`; a.click(); toast('已导出整库 JSON') }}>整库导出</button>
-          <button className="pill sm ghost" onClick={async () => { if (!confirm('清空本地示例数据？你的真实记录也会一起清，先导出。')) return; await Promise.all(db.tables.map(t => t.clear())); location.reload() }}>清空重来</button></div>
+      <div className="card"><div className="lbl muted mb-2" style={{ opacity: 1 }}>数据与账号</div>
+        {cloudMode ? (<>
+          <div className="text-[14px] mb-2"><b>云端模式</b>：{email || '…'}。本地有副本，离线能用，联网自动同步，手机电脑同一份。</div>
+          <div className="flex gap-1.5 flex-wrap">
+            <button className="pill sm" onClick={async () => { const r = await sync(); toast(r ? `同步完成：上传 ${r.pushed} · 下载 ${r.pulled}` : '没登录或正在同步') }}>立即同步</button>
+            <button className="pill sm ghost" onClick={async () => { const { data, error } = await supabase!.rpc('make_invite'); if (error) toast('生成失败：' + error.message); else { setInvite(data as string); toast('邀请码已生成') } }}>生成邀请码</button>
+            <button className="pill sm ghost" onClick={async () => { await supabase!.auth.signOut(); localStorage.removeItem('floraos.lastPull'); localStorage.removeItem('floraos.firstSyncDone'); location.reload() }}>退出登录</button>
+          </div>
+          {invite && <div className="mt-2 text-[14px]">邀请码：<b className="tabular-nums tracking-widest">{invite}</b><span className="muted text-[12px]"> 给朋友，只能用一次</span></div>}
+        </>) : <div className="text-[14px] mb-2">现在是<b>本地模式</b>：数据在这台设备的浏览器里。填上 .env 里的 Supabase 地址后手机电脑同步。</div>}
+        <div className="flex gap-1.5 mt-2"><button className="pill sm" onClick={async () => { const s = await exportAll(); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([s], { type: 'application/json' })); a.download = `floraos-${new Date().toISOString().slice(0, 10)}.json`; a.click(); toast('已导出整库 JSON') }}>整库导出</button>
+          {!cloudMode && <button className="pill sm ghost" onClick={async () => { if (!confirm('清空本地示例数据？你的真实记录也会一起清，先导出。')) return; await Promise.all(db.tables.map(t => t.clear())); location.reload() }}>清空重来</button>}</div>
       </div>
     </div>
   )

@@ -12,6 +12,10 @@ import { Inbox } from './pages/Inbox'
 import { Modules } from './pages/Modules'
 import { Review } from './pages/Review'
 import { Settings } from './pages/Settings'
+import { Login } from './pages/Login'
+import { supabase, cloudMode } from './lib/supabase'
+import { startAutoSync, markAllDirty, sync } from './lib/sync'
+import type { Session } from '@supabase/supabase-js'
 
 type View = 'home' | 'inbox' | 'mods' | 'review' | 'cfg'
 const TABS: { v: View; i: string; l: string }[] = [{ v: 'home', i: '☀︎', l: '今日' }, { v: 'inbox', i: '⌸', l: '收件' }, { v: 'mods', i: '▦', l: '模块' }, { v: 'review', i: '◑', l: '复盘' }]
@@ -23,7 +27,24 @@ export default function App() {
   const [view, setView] = useState<View>('home')
   const [sub, setSub] = useState<string | undefined>()
   const [dir, setDir] = useState(1)
-  useEffect(() => { (async () => { const c = await loadConfig(); setCfg(c); await seedIfEmpty(c); await ensureMonth(c); setReady(true) })() }, [])
+  const [session, setSession] = useState<Session | null | undefined>(cloudMode ? undefined : null)
+  useEffect(() => {
+    if (!supabase) return
+    supabase.auth.getSession().then(({ data }) => setSession(data.session))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
+    return () => sub.subscription.unsubscribe()
+  }, [])
+  useEffect(() => {
+    if (cloudMode && !session) return
+    (async () => {
+      if (cloudMode) {
+        if (!localStorage.getItem('floraos.firstSyncDone')) { await markAllDirty(); localStorage.setItem('floraos.firstSyncDone', '1') }
+        await sync()
+      } else await seedIfEmpty(DEFAULT_CONFIG)
+      const c = await loadConfig(); setCfg(c); await ensureMonth(c); setReady(true)
+    })()
+    const stop = startAutoSync(); return stop
+  }, [session])
   useEffect(() => {
     const r = document.documentElement
     if (cfg.palette) r.setAttribute('data-palette', cfg.palette); else r.removeAttribute('data-palette')
@@ -32,6 +53,8 @@ export default function App() {
   const pendingN = useLiveQuery(async () => (await db.issues.where('status').equals('open').count()) + (await db.todos.where('review').equals('pending').count()) + (await db.entries.where('review').equals('pending').count()), []) ?? 0
 
   function go(v: string, s?: string) { setDir(TABS.findIndex(t => t.v === v) >= TABS.findIndex(t => t.v === view) ? 1 : -1); setView(v as View); setSub(s) }
+  if (cloudMode && session === undefined) return null
+  if (cloudMode && !session) return <ToastProvider><Login /></ToastProvider>
   if (!ready) return null
   const d = new Date()
   const page = (
@@ -73,7 +96,7 @@ export default function App() {
         <aside className="sticky top-6 self-start">
           <div className="text-[22px] font-extrabold mb-6 flex items-center gap-2"><span className="w-7 h-7 rounded-lg accent inline-block" />FloraOS</div>
           {[...TABS, { v: 'cfg' as View, i: '⚙︎', l: '设置' }].map(t => <button key={t.v} onClick={() => go(t.v)} className="w-full text-left border-0 rounded-2xl px-3.5 py-2.5 mb-1 font-semibold cursor-pointer flex items-center gap-3" style={{ background: view === t.v ? 'var(--surface)' : 'transparent', color: view === t.v ? 'var(--fg)' : 'var(--muted)' }}><span className="text-[18px]">{t.i}</span>{t.l}{t.v === 'review' && pendingN > 0 && <span className="ml-auto chip c4">{pendingN}</span>}</button>)}
-          <div className="muted text-[12px] mt-6 px-3.5">本地模式 · 数据在此浏览器</div>
+          <div className="muted text-[12px] mt-6 px-3.5">{cloudMode ? '云端同步 · 法兰克福' : '本地模式 · 数据在此浏览器'}</div>
         </aside>
         <div>
           <div className="mb-4">{header}</div>
