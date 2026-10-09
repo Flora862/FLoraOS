@@ -94,7 +94,7 @@ export default function App() {
       {/* 电脑：三栏 */}
       <div className="hidden lg:grid min-h-full" style={{ gridTemplateColumns: '220px 1fr 340px', gap: 24, maxWidth: 1240, margin: '0 auto', padding: '24px 24px 40px' }}>
         <aside className="sticky top-6 self-start">
-          <div className="text-[22px] font-extrabold mb-6 flex items-center gap-2"><span className="w-7 h-7 rounded-lg accent inline-block" />FloraOS</div>
+          <div className="text-[22px] font-extrabold mb-6 flex items-center gap-2"><img src="/icon-192.png" alt="" className="w-7 h-7 rounded-lg" />FloraOS</div>
           {[...TABS, { v: 'cfg' as View, i: '⚙︎', l: '设置' }].map(t => <button key={t.v} onClick={() => go(t.v)} className="w-full text-left border-0 rounded-2xl px-3.5 py-2.5 mb-1 font-semibold cursor-pointer flex items-center gap-3" style={{ background: view === t.v ? 'var(--surface)' : 'transparent', color: view === t.v ? 'var(--fg)' : 'var(--muted)' }}><span className="text-[18px]">{t.i}</span>{t.l}{t.v === 'review' && pendingN > 0 && <span className="ml-auto chip c4">{pendingN}</span>}</button>)}
           <div className="muted text-[12px] mt-6 px-3.5">{cloudMode ? '云端同步 · 法兰克福' : '本地模式 · 数据在此浏览器'}</div>
         </aside>

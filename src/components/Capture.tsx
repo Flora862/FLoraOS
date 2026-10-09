@@ -20,7 +20,9 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
   function voice() {
     const W = window as unknown as { SpeechRecognition?: new () => SpeechRecognitionLike; webkitSpeechRecognition?: new () => SpeechRecognitionLike }
     const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition
-    if (!Ctor) { toast('这个浏览器不支持语音。用键盘上的麦克风键听写也一样'); return }
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    if (isIOS || !Ctor) { document.getElementById('capture')?.focus(); toast(isIOS ? '点键盘右下角的麦克风说话，说完点右上角完成' : '这个浏览器不支持语音，用键盘上的麦克风键'); return }
+    if (false) { toast('这个浏览器不支持语音。用键盘上的麦克风键听写也一样'); return }
     if (listening) { recRef.current?.stop(); return }
     const rec = new Ctor(); recRef.current = rec
     rec.lang = 'zh-CN'; rec.interimResults = true; rec.continuous = false
@@ -28,7 +30,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
     rec.onresult = (e) => { let t = ''; for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; setText(base + t) }
     rec.onerror = (e) => { setListening(false); toast(e.error === 'not-allowed' ? '没拿到麦克风权限。设置里允许一下，或用键盘的麦克风键' : '语音没听清，再试一次') }
     rec.onend = () => setListening(false)
-    try { rec.start(); setListening(true); toast('在听…说完自动停，再点一下也能停') } catch { setListening(false) }
+    try { rec.start(); setListening(true); toast('在听…说完自动停，再点一下也能停'); window.setTimeout(() => { try { rec.stop() } catch { /* noop */ } }, 12000) } catch { setListening(false) }
   }
 
   async function send() {
@@ -45,6 +47,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
     let msg = '已收 · ' + p.tags.join(' / ')
     if (p.todo) msg += ' · 建了待办' + (p.date ? '（' + fmtDate(p.date) + '）' : '')
     if (p.issue) msg += ' · 记为问题，进待复盘池'
+    if (p.bigThing) msg = (p.bigThing.day === 'today' ? '今天' : '明天') + '的大事定了' + (p.bigThing.standard ? '，标准也记了' : '。晚上复盘时补一句做成的标准')
     if (p.pages) msg += ' · 进度已更新'
     if (p.money) msg += ' · 已记到「' + p.money.envelope + '」'
     toast(msg)
@@ -76,6 +79,7 @@ export function Capture({ cfg, desktop }: { cfg: AppConfig; desktop?: boolean })
             {live.pages && <span className="chip c5">读到 {live.pages} 页</span>}
             {live.money && <span className="chip c3">€{live.money.amount} → {live.money.envelope}</span>}
             {live.ask && <span className="chip ghost">会问你是待办还是问题</span>}
+            {live.bigThing && <span className="chip c5">→ {live.bigThing.day === 'today' ? '今天' : '明天'}的大事</span>}
           </>) : <span>试试："明天得问 Lackmann 料号" · "和朋友吃饭 €25" · "纳瓦尔读到 226 页"</span>}
         </div>
       </div>

@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { motion } from 'framer-motion'
 import { db, type ReadingLog } from '../lib/db'
 import { month, today, daysBetween, dOff } from '../lib/dates'
-import { pagesPerDay, behindDays, freeToSpend, ensureMonth } from '../lib/store'
+import { pagesPerDay, behindDays, freeToSpend, ensureMonth, spend } from '../lib/store'
 import type { AppConfig } from '../lib/config'
 import { Heat, CountUp, useToast } from '../components/ui'
 
@@ -85,7 +85,43 @@ function FinPage({ cfg, back }: { cfg: AppConfig; back: () => void }) {
       <div className="sect">存量资金 <span>以保护为主 · 在设置里改</span></div>
       <div className="grid grid-cols-2 gap-2.5 mb-3">{accounts.map((a, i) => <div key={a.id} className={'tile ' + ['t1', 't2', 't4', 't5'][i % 4]}><div className="lbl">{a.name}</div><div className="num text-[26px]">€{a.amount.toLocaleString()}</div><small className="opacity-80 text-[12px]">{a.rule}</small></div>)}</div>
       <div className="card mb-3"><div className="lbl muted" style={{ opacity: 1 }}>最近消费 · 说一句就记</div>{tx.map(t => { const e = envs.find(x => x.id === t.envelopeId); return <div key={t.id} className="item"><div className="t">{t.date.slice(5)} · <span className={'chip ' + (e?.color ?? '')}>{e?.name}</span></div>{t.text}{e && <div className="m">{e.name} 剩 €{Math.max(0, e.budget - e.used)}。长期储蓄不受影响。</div>}</div> })}{!tx.length && <div className="muted text-[13px] py-2">还没有。试试说"吃饭 €12"。</div>}</div>
+      <BatchImport cfg={cfg} />
       <div className="card"><div className="lbl muted" style={{ opacity: 1 }}>消费时怎么判断（V1 §12）</div><div className="text-[14px] leading-7">不问"能不能不花"。问：<b>这笔属于哪个信封？信封里还有多少？</b><br />有，愿意，就花。没有，先攒目标基金。</div><button className="pill sm ghost mt-2" onClick={() => toast('三个月验证表：第 3 个月结自动出')}>V1 三个数字验证中</button></div>
+    </div>
+  )
+}
+
+/** 批量导入：从银行 App 截图用 iPhone「实况文本」复制出来，粘进来，一行一笔 */
+function BatchImport({ cfg }: { cfg: AppConfig }) {
+  const [raw, setRaw] = useState('')
+  const [rows, setRows] = useState<{ text: string; amount: number; env: string; date: string }[]>([])
+  const toast = useToast()
+  const envNames = cfg.finance.envelopes.filter(e => !e.locked).map(e => e.name)
+  function parseLines() {
+    const out: typeof rows = []
+    for (const line of raw.split(/\n+/)) {
+      const t = line.trim(); if (!t) continue
+      const m = t.match(/-?\s*(?:€|EUR)?\s*(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:€|EUR)?/i); if (!m) continue
+      const amount = Math.abs(parseFloat(m[1].replace(',', '.'))); if (!amount) continue
+      const env = cfg.finance.envelopes.find(e => e.words?.some(w => t.toLowerCase().includes(w.toLowerCase())))?.name ?? '机动'
+      const dm = t.match(/(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?/)
+      const date = dm ? `${dm[3] ? (dm[3].length === 2 ? '20' + dm[3] : dm[3]) : today().slice(0, 4)}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}` : today()
+      out.push({ text: t.replace(m[0], '').replace(/\s+/g, ' ').trim() || t, amount, env, date })
+    }
+    setRows(out); if (!out.length) toast('没认出金额。每行要有一个数字金额')
+  }
+  async function commit() {
+    for (const r of rows) await spend(r.amount, r.env, r.text + ' €' + r.amount, cfg)
+    toast('导入 ' + rows.length + ' 笔'); setRows([]); setRaw('')
+  }
+  return (
+    <div className="card mb-3"><div className="lbl muted" style={{ opacity: 1 }}>批量导入 · 银行截图 → 实况文本复制 → 粘贴</div>
+      <textarea rows={4} value={raw} onChange={e => setRaw(e.target.value)} placeholder={'一行一笔，有金额就行。例：\n08.10 REWE SAGT DANKE 38,20\nLieferando 12,50\nDB Ticket 29'} />
+      <div className="flex gap-1.5 mt-2"><button className="pill sm" onClick={parseLines}>识别</button>{rows.length > 0 && <button className="pill sm" onClick={commit}>确认导入 {rows.length} 笔</button>}</div>
+      {rows.map((r, i) => <div key={i} className="item flex items-center gap-2 flex-wrap"><span className="muted text-[12px] tabular-nums">{r.date.slice(5)}</span><span className="flex-1 min-w-0 truncate">{r.text}</span><b className="tabular-nums">€{r.amount}</b>
+        <select className="rounded-lg px-2 py-1 border-0 text-[13px]" style={{ background: 'var(--bg)' }} value={r.env} onChange={e => setRows(rs => rs.map((x, k) => k === i ? { ...x, env: e.target.value } : x))}>{envNames.map(n => <option key={n}>{n}</option>)}</select>
+        <button className="pill sm ghost" onClick={() => setRows(rs => rs.filter((_, k) => k !== i))}>×</button></div>)}
+      <div className="muted text-[12px] mt-2">金额按行识别，信封按关键词猜，猜错的在下拉里改。固定支出和储蓄不用导，它们是锁定的。</div>
     </div>
   )
 }

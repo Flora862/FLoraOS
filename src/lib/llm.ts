@@ -39,7 +39,7 @@ export async function summarize(text: string): Promise<{ text: string; model: st
 }
 
 export function merge(rule: Parsed, llm: ClassifyResult | null): Parsed {
-  if (!llm) return rule
+  if (!llm || rule.bigThing) return rule
   return {
     ...rule,
     tags: llm.tags?.length ? llm.tags : rule.tags,

@@ -24,7 +24,7 @@ export function Login() {
   return (
     <div className="min-h-full grid place-items-center p-4">
       <motion.div initial={{ y: 16, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-full max-w-[400px]">
-        <div className="flex items-center gap-2 mb-6"><span className="w-9 h-9 rounded-xl accent inline-block" /><span className="text-[24px] font-extrabold">FloraOS</span></div>
+        <div className="flex items-center gap-2 mb-6"><img src="/icon-192.png" alt="" className="w-10 h-10 rounded-xl" /><span className="text-[24px] font-extrabold">FloraOS</span></div>
         <div className="card grid gap-2.5">
           <div className="seg"><button className={mode === 'login' ? 'on' : ''} onClick={() => setMode('login')}>登录</button><button className={mode === 'signup' ? 'on' : ''} onClick={() => setMode('signup')}>注册</button></div>
           <input className="rounded-xl p-3 border-0" style={{ background: 'var(--bg)' }} type="email" placeholder="邮箱" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" />

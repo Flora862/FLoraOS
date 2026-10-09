@@ -14,6 +14,7 @@ export interface Parsed {
   pages?: number          // 图书：读到 N 页
   money?: { amount: number; envelope: string }
   isIdea: boolean
+  bigThing?: { day: 'today' | 'tomorrow'; text: string; standard?: string }
 }
 
 export function parseDate(x: string): string | undefined {
@@ -45,6 +46,15 @@ export function parse(x: string, cfg: AppConfig): Parsed {
   const isIdea = tags.includes('想法')
   const p: Parsed = { text, tags, date, evening, ask: false, isIdea }
 
+  // 大事："今天的大事是 X" / "明天（的）一件大事：X，标准是 Y"
+  const bt = text.match(/^(今天|明天)(?:的)?(?:一件)?大事(?:是|：|:|，|,)?\s*(.+)$/)
+  if (bt) {
+    let body = bt[2].trim(); let standard: string | undefined
+    const st = body.match(/^(.*?)(?:[，,。；;]\s*)?(?:做成的?标准|标准)(?:是|：|:)\s*(.+)$/)
+    if (st) { body = st[1].trim(); standard = st[2].trim() }
+    p.bigThing = { day: bt[1] === '今天' ? 'today' : 'tomorrow', text: body, standard }
+    p.tags = ['大事']; return p
+  }
   // 图书：读到 N 页
   const pg = text.match(/读到\s*(\d+)\s*页/)
   if (pg) { p.pages = +pg[1]; if (!tags.includes('图书')) p.tags = [...tags.filter(t => t !== '杂'), '图书']; return p }

@@ -18,6 +18,7 @@ export async function capture(text: string, cfg: AppConfig, source: Entry['sourc
   const parsed = merge(rule, llm)
   const entryId = await db.entries.add({ at: new Date().toISOString(), text, source, tags: parsed.tags, review: 'none' })
 
+  if (parsed.bigThing) { const d = parsed.bigThing.day === 'today' ? today() : daysBetweenShift(today(), 1); await setBigThing(d, parsed.bigThing.text, parsed.bigThing.standard ?? '', cfg.bigThingMinutes) }
   if (parsed.pages) await logPages(parsed.pages, entryId)
   if (parsed.money) await spend(parsed.money.amount, parsed.money.envelope, text, cfg, entryId)
   if (parsed.todo && !parsed.ask) await addTodo(parsed.todo, { entryId, date: parsed.date, evening: parsed.evening, tag: parsed.tags[0] })
